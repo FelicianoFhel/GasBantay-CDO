@@ -17,9 +17,9 @@ begin
   end loop;
 end $$;
 
+-- Migrate old fuel_type values so existing rows satisfy the new constraint
+update public.price_reports set fuel_type = 'regular_green' where fuel_type = 'unleaded';
+update public.price_reports set fuel_type = 'premium_red' where fuel_type = 'premium';
+
 alter table public.price_reports add constraint price_reports_fuel_type_check
   check (fuel_type in ('diesel', 'regular_green', 'premium_red'));
-
--- Optional: migrate old values to new (uncomment if you had unleaded/premium and want to keep rows)
--- update public.price_reports set fuel_type = 'regular_green' where fuel_type = 'unleaded';
--- update public.price_reports set fuel_type = 'premium_red' where fuel_type = 'premium';
