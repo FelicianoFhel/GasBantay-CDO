@@ -3,7 +3,9 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "vite build"
+        "build": "vite build",
+        "import:stations:osm": "npm --prefix gas-map-app run import:stations:osm",
+        "import:stations:osm:apply": "npm --prefix gas-map-app run import:stations:osm:apply"
     },
     "devDependencies": {
         "axios": "^1.6.4",

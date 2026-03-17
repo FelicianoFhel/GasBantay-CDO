@@ -13,6 +13,5 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::get('/', function () {
-    return view('welcome');
-});
+// CDO Gas Price Map (React SPA) at /gas-map — redirect root to it
+Route::redirect('/', '/gas-map/');
