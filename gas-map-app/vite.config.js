@@ -2,7 +2,8 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
-const isVercel = process.env.VERCEL === '1';
+// Vercel sets VERCEL=1; use truthy check so we output to dist and base /
+const isVercel = Boolean(process.env.VERCEL);
 
 export default defineConfig({
   plugins: [react()],
