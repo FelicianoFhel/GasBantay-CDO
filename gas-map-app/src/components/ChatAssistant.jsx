@@ -7,7 +7,7 @@ import { fetchChatDataContext } from '../lib/chatDataContext';
 const PREDEFINED_QUESTIONS = [
   {
     label: 'Presyo duol nako',
-    text: 'Unsa ang presyo sa gas nga duol nako karon? Tubaga pormal gamit ang LIVE_APP_DATA lang: kung dunay presyo, ipakita og tarong; kung wala, ipasabot ngano ug unsaon (lokasyon, pag-submit). Ayaw pagbuhat og tabla nga tanan “—”.',
+    text: 'Unsa ang presyo sa gas nga duol nako karon? Gamita ang LIVE_APP_DATA: una ang **top 5 nga pinakaduol**; kung dunay presyo, ipakita; kung wala, ipasabot nga community report pa. Ayaw pagbuhat og dagkong tabla nga tanan “—”.',
   },
   {
     label: 'Unsaon pag-submit?',
@@ -27,7 +27,13 @@ function ChatMarkdown({ content }) {
   );
 }
 
-export default function ChatAssistant({ stations = [], userPosition = null }) {
+export default function ChatAssistant({
+  stations = [],
+  userPosition = null,
+  onRequestLocation,
+  locationLoading = false,
+  locationError = null,
+}) {
   const [open, setOpen] = useState(false);
   const [backendConfigured, setBackendConfigured] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -156,7 +162,7 @@ export default function ChatAssistant({ stations = [], userPosition = null }) {
                 Map assistant
               </h2>
               <p className="chat-assistant__sub">
-                Groq · Bisaya default · multilingual · live prices gikan DB
+                Developed by Fheli
               </p>
               {backendConfigured === false && (
                 <p className="chat-assistant__warn" role="status">
@@ -208,6 +214,46 @@ export default function ChatAssistant({ stations = [], userPosition = null }) {
               {error}
             </p>
           )}
+
+          <div className="chat-assistant__loc" role="region" aria-label="Location for nearest stations">
+            {userPosition ? (
+              <div className="chat-assistant__loc-on">
+                <span className="chat-assistant__loc-status" role="status">
+                  Lokasyon: <strong>gipadagan</strong> — ang assistant mogamit og top 5 nga pinakaduol
+                  (gilay-on: straight-line km).
+                </span>
+                {typeof onRequestLocation === 'function' && (
+                  <button
+                    type="button"
+                    className="chat-assistant__loc-btn chat-assistant__loc-btn--ghost"
+                    disabled={locationLoading || sending}
+                    onClick={() => onRequestLocation()}
+                  >
+                    {locationLoading ? 'Nagkuha…' : 'I-refresh ang lokasyon'}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="chat-assistant__loc-off">
+                <button
+                  type="button"
+                  className="chat-assistant__loc-btn chat-assistant__loc-btn--primary"
+                  disabled={locationLoading || sending || typeof onRequestLocation !== 'function'}
+                  onClick={() => onRequestLocation?.()}
+                >
+                  {locationLoading ? 'Naghangyo sa lokasyon…' : 'I-on ang lokasyon (top 5 nga duol)'}
+                </button>
+                <p className="chat-assistant__loc-hint">
+                  Kinahanglan para mas tukma ang “presyo duol nako.” Ang browser mangutana og permission.
+                </p>
+              </div>
+            )}
+            {locationError && (
+              <p className="chat-assistant__loc-err" role="alert">
+                {locationError}
+              </p>
+            )}
+          </div>
 
           <div className="chat-assistant__chips" role="group" aria-label="Suggested questions">
             {PREDEFINED_QUESTIONS.map(({ label, text }) => (

@@ -145,7 +145,13 @@ export default function App() {
           onReportSubmitted={handleReportSubmitted}
         />
       )}
-      <ChatAssistant stations={filteredStations} userPosition={userPosition} />
+      <ChatAssistant
+        stations={filteredStations}
+        userPosition={userPosition}
+        onRequestLocation={requestLocation}
+        locationLoading={locationLoading}
+        locationError={locationError}
+      />
     </>
   );
 }
