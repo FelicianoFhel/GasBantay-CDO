@@ -4,6 +4,7 @@ import StationPopup from './components/StationPopup';
 import Dashboard from './components/Dashboard';
 import SearchBar from './components/SearchBar';
 import ChatAssistant from './components/ChatAssistant';
+import PrivacyModal from './components/PrivacyModal';
 import { isSupabaseConfigured } from './lib/supabaseClient';
 import { supabase } from './lib/supabaseClient';
 import { getUserPosition } from './lib/geo';
@@ -28,6 +29,7 @@ export default function App() {
   const [userPosition, setUserPosition] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState(null);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
 
   const filteredStations = useMemo(
     () => filterStationsBySearch(stations, searchQuery),
@@ -137,7 +139,14 @@ export default function App() {
             />
           </div>
         </section>
+        <footer className="app-footer" role="contentinfo">
+          <button type="button" className="app-footer__link" onClick={() => setPrivacyOpen(true)}>
+            Privacy policy
+          </button>
+          <span className="app-footer__note">Community-submitted prices · verify at the station</span>
+        </footer>
       </main>
+      <PrivacyModal open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
       {selectedStation && (
         <StationPopup
           station={selectedStation}
