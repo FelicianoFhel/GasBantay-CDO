@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { chatPostUrl, chatStatusUrl } from '../lib/chatApi';
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 import { fetchChatDataContext } from '../lib/chatDataContext';
@@ -42,7 +43,7 @@ function LocPinIcon({ className }) {
 function ChatMarkdown({ content }) {
   return (
     <div className="chat-assistant__md">
-      <Markdown>{content}</Markdown>
+      <Markdown remarkPlugins={[remarkGfm]}>{content}</Markdown>
     </div>
   );
 }

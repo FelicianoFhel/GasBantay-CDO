@@ -126,7 +126,7 @@ export async function fetchChatDataContext(supabase, stations, userPosition) {
   );
   lines.push('');
   lines.push(
-    '**Assistant rules (from app):** Do **not** copy this block verbatim. Do **not** say “LIVE_APP_DATA” or other technical names. For near-me with location on, answer from **Top 3 nearest** only. No huge all-dash price tables.'
+    '**Assistant rules (from app):** Do **not** copy this block verbatim. Do **not** say “LIVE_APP_DATA” or other technical names. For near-me with location on, answer from **Top 3 nearest** only. Prefer concise bullet lines (Station — km — Diesel/Regular/Premium) instead of markdown tables in final user response.'
   );
   lines.push('');
 
