@@ -61,7 +61,8 @@
   --z-overlay: 2000;
   --z-panel: 2001;
   --z-config: 2002;
-  --z-chat: 1700;
+  /* Above map/Leaflet controls; below station overlay (2000) */
+  --z-chat: 1950;
 }
 
 @media (min-width: 768px) {
@@ -1180,6 +1181,23 @@ html, body, #root {
   margin: 2px 0 0;
   font-size: var(--text-xs);
   color: rgba(226, 232, 240, 0.75);
+}
+
+.chat-assistant__warn {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2);
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: #fef08a;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: var(--radius-sm);
+}
+
+.chat-assistant__warn code {
+  font-size: 0.65rem;
+  padding: 1px 4px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
 }
 
 .chat-assistant__close {

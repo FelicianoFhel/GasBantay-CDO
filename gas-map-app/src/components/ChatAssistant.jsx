@@ -3,7 +3,8 @@ import { chatPostUrl, chatStatusUrl } from '../lib/chatApi';
 
 export default function ChatAssistant() {
   const [open, setOpen] = useState(false);
-  const [enabled, setEnabled] = useState(null);
+  /** Server has GROQ_API_KEY (from GET /api/chat). FAB is always shown regardless. */
+  const [backendConfigured, setBackendConfigured] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -18,12 +19,12 @@ export default function ChatAssistant() {
         const data = await res.json().catch(() => ({}));
         if (cancelled) return;
         if (!res.ok) {
-          setEnabled(true);
+          setBackendConfigured(false);
           return;
         }
-        setEnabled(data.enabled !== false);
+        setBackendConfigured(Boolean(data.enabled));
       } catch {
-        if (!cancelled) setEnabled(true);
+        if (!cancelled) setBackendConfigured(false);
       }
     })();
     return () => {
@@ -75,15 +76,6 @@ export default function ChatAssistant() {
     }
   };
 
-  if (enabled === false) return null;
-  if (enabled === null) {
-    return (
-      <div className="chat-assistant chat-assistant--loading" aria-hidden>
-        <div className="chat-assistant__fab chat-assistant__fab--ghost" />
-      </div>
-    );
-  }
-
   return (
     <div className="chat-assistant">
       {!open && (
@@ -118,6 +110,12 @@ export default function ChatAssistant() {
                 Map assistant
               </h2>
               <p className="chat-assistant__sub">Groq · CDO gas prices help</p>
+              {backendConfigured === false && (
+                <p className="chat-assistant__warn" role="status">
+                  Add <code>GROQ_API_KEY</code> in Vercel project env and redeploy, or set{' '}
+                  <code>VITE_CHAT_API_URL</code> for local dev.
+                </p>
+              )}
             </div>
             <button
               type="button"
