@@ -2,11 +2,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { getVoterId } from '../lib/fingerprint';
 import { formatUpdatedAt } from '../lib/relativeTime';
-import {
-  getVoteCooldownRemainingMs,
-  startVoteCooldown,
-  formatCooldownClock,
-} from '../lib/voteCooldown';
 import { FUEL_TYPES } from '../constants';
 import SubmitPriceForm from './SubmitPriceForm';
 
@@ -23,13 +18,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
   const [reportsExpanded, setReportsExpanded] = useState(false);
   const [activeFuelTab, setActiveFuelTab] = useState(FUEL_TYPES[0].value);
   const [detailReport, setDetailReport] = useState(null);
-  const [cooldownTick, setCooldownTick] = useState(0);
   const voterId = getVoterId();
-
-  useEffect(() => {
-    const id = setInterval(() => setCooldownTick((n) => n + 1), 1000);
-    return () => clearInterval(id);
-  }, []);
 
   useEffect(() => {
     setReportsExpanded(false);
@@ -45,14 +34,6 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [detailReport]);
-
-  const voteCooldownMs = useMemo(
-    () => getVoteCooldownRemainingMs(activeFuelTab),
-    [cooldownTick, activeFuelTab]
-  );
-  const voteLocked = voteCooldownMs > 0;
-  const activeTabLabel =
-    FUEL_TYPES.find((f) => f.value === activeFuelTab)?.tabLabel || 'This fuel';
 
   const fetchReports = useCallback(async () => {
     if (!station?.id) return;
@@ -148,7 +129,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
   const topReport = sortedByTrust[0];
   const updatedAt = topReport?.reported_at || topReport?.created_at;
 
-  const handleLike = async (reportId, fuelType) => {
+  const handleLike = async (reportId) => {
     if (myLikes.has(reportId)) {
       const { error } = await supabase
         .from('upvotes')
@@ -168,7 +149,6 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
         ...c,
         [reportId]: Math.max(0, (c[reportId] || 0) - 1),
       }));
-      startVoteCooldown(fuelType);
       await fetchReports();
       return;
     }
@@ -204,11 +184,10 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
     }
     setMyLikes((s) => new Set(s).add(reportId));
     setLikeCounts((c) => ({ ...c, [reportId]: (c[reportId] || 0) + 1 }));
-    startVoteCooldown(fuelType);
     await fetchReports();
   };
 
-  const handleDislike = async (reportId, fuelType) => {
+  const handleDislike = async (reportId) => {
     if (myDislikes.has(reportId)) {
       const { error } = await supabase
         .from('downvotes')
@@ -228,7 +207,6 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
         ...c,
         [reportId]: Math.max(0, (c[reportId] || 0) - 1),
       }));
-      startVoteCooldown(fuelType);
       await fetchReports();
       return;
     }
@@ -264,7 +242,6 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
     }
     setMyDislikes((s) => new Set(s).add(reportId));
     setDislikeCounts((c) => ({ ...c, [reportId]: (c[reportId] || 0) + 1 }));
-    startVoteCooldown(fuelType);
     await fetchReports();
   };
 
@@ -359,11 +336,6 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
                 Browse by fuel type — tap a row for full details
               </p>
             </div>
-            {voteLocked && (
-              <p className="station-panel__vote-cooldown" role="status">
-                Next {activeTabLabel} vote in {formatCooldownClock(voteCooldownMs)}
-              </p>
-            )}
             {loading ? null : reports.length === 0 ? null : (
               <>
                 <div
@@ -443,37 +415,23 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
                           <span className="vote-wrap">
                             <button
                               type="button"
-                              disabled={voteLocked}
                               className={`vote-btn vote-btn--like ${myLikes.has(r.id) ? 'is-active' : ''}`}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (!voteLocked) handleLike(r.id, r.fuel_type);
+                                handleLike(r.id);
                               }}
-                              title={
-                                voteLocked
-                                  ? `Wait ${formatCooldownClock(voteCooldownMs)}`
-                                  : myLikes.has(r.id)
-                                    ? 'Remove like'
-                                    : 'Like'
-                              }
+                              title={myLikes.has(r.id) ? 'Remove like' : 'Like'}
                             >
                               👍 {likeCounts[r.id] || 0}
                             </button>
                             <button
                               type="button"
-                              disabled={voteLocked}
                               className={`vote-btn vote-btn--dislike ${myDislikes.has(r.id) ? 'is-active' : ''}`}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (!voteLocked) handleDislike(r.id, r.fuel_type);
+                                handleDislike(r.id);
                               }}
-                              title={
-                                voteLocked
-                                  ? `Wait ${formatCooldownClock(voteCooldownMs)}`
-                                  : myDislikes.has(r.id)
-                                    ? 'Remove dislike'
-                                    : 'Dislike'
-                              }
+                              title={myDislikes.has(r.id) ? 'Remove dislike' : 'Dislike'}
                             >
                               👎 {dislikeCounts[r.id] || 0}
                             </button>
