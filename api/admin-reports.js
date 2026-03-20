@@ -230,6 +230,22 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true });
       }
 
+      if (action === 'delete_report') {
+        const reportId = String(body?.report_id || '').trim();
+        if (!reportId) return res.status(400).json({ error: 'report_id required' });
+        const out = await sbFetch(`price_reports?id=eq.${encodeURIComponent(reportId)}`, {
+          method: 'DELETE',
+          headers: { Prefer: 'return=minimal' },
+        });
+        if (!out.res.ok) {
+          const hint = extractErrorHint(out);
+          return res.status(502).json({
+            error: hint ? `Failed to delete report: ${hint}` : 'Failed to delete report',
+          });
+        }
+        return res.status(200).json({ ok: true });
+      }
+
       return res.status(400).json({ error: 'Unsupported action' });
     }
 

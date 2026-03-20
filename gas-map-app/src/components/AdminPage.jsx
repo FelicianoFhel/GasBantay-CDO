@@ -54,6 +54,8 @@ export default function AdminPage() {
   const [reportsLoading, setReportsLoading] = useState(false);
   const [reportsError, setReportsError] = useState('');
   const [voteDrafts, setVoteDrafts] = useState({});
+  const [reportSearch, setReportSearch] = useState('');
+  const [selectedReport, setSelectedReport] = useState(null);
 
   const isLoggedIn = Boolean(token);
   const reportGroups = useMemo(() => {
@@ -88,6 +90,20 @@ export default function AdminPage() {
       }))
       .sort((a, b) => a.station_name.localeCompare(b.station_name));
   }, [reports]);
+  const filteredReportGroups = useMemo(() => {
+    const q = reportSearch.trim().toLowerCase();
+    if (!q) return reportGroups;
+    return reportGroups
+      .map((group) => {
+        const stationText = `${group.station_name || ''} ${group.station_address || ''}`.toLowerCase();
+        if (stationText.includes(q)) return group;
+        const fuels = group.fuels.filter((r) =>
+          String(r.fuel_type || '').toLowerCase().includes(q)
+        );
+        return { ...group, fuels };
+      })
+      .filter((group) => group.fuels.length > 0);
+  }, [reportGroups, reportSearch]);
 
   const authHeaders = useMemo(
     () => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }),
@@ -317,6 +333,29 @@ export default function AdminPage() {
     }
   };
 
+  const deleteReport = async (report) => {
+    if (!report?.id) return;
+    const ok = confirm(`Delete this ${report.fuel_type} report for ${report.station_name}?`);
+    if (!ok) return;
+    setReportsError('');
+    try {
+      const res = await fetch(`${apiBase()}/admin-reports`, {
+        method: 'PATCH',
+        headers: authHeaders,
+        body: JSON.stringify({
+          action: 'delete_report',
+          report_id: report.id,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to delete report');
+      setReports((prev) => prev.filter((item) => item.id !== report.id));
+      if (selectedReport?.id === report.id) setSelectedReport(null);
+    } catch (e) {
+      setReportsError(e.message || 'Failed to delete report');
+    }
+  };
+
   if (!isLoggedIn) {
     return (
       <main className="admin-page">
@@ -419,14 +458,23 @@ export default function AdminPage() {
 
 
         <section className="admin-panel">
-          <h2>Price Reports ({reportGroups.length} stations)</h2>
+          <h2>Price Reports ({filteredReportGroups.length} stations)</h2>
           <p className="admin-hint">
             You can increase vote counts or mark a report as official price for its station + fuel.
           </p>
+          <label className="admin-search">
+            <input
+              type="search"
+              value={reportSearch}
+              onChange={(e) => setReportSearch(e.target.value)}
+              placeholder="Search station, address, or fuel…"
+              aria-label="Search price reports"
+            />
+          </label>
           {reportsError && <p className="admin-error">{reportsError}</p>}
           {reportsLoading ? (
             <p>Loading reports…</p>
-          ) : reportGroups.length === 0 ? (
+          ) : filteredReportGroups.length === 0 ? (
             <p>No reports yet.</p>
           ) : (
             <div className="admin-table-wrap">
@@ -442,7 +490,7 @@ export default function AdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {reportGroups.flatMap((group) =>
+                  {filteredReportGroups.flatMap((group) =>
                     group.fuels.map((r, idx) => (
                       <tr key={r.id}>
                         {idx === 0 && (
@@ -504,6 +552,20 @@ export default function AdminPage() {
                           <button type="button" className="btn-secondary" onClick={() => setOfficial(r.id)}>
                             Set official
                           </button>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => setSelectedReport(r)}
+                          >
+                            View
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => deleteReport(r)}
+                          >
+                            Delete
+                          </button>
                         </td>
                       </tr>
                     ))
@@ -564,6 +626,51 @@ export default function AdminPage() {
 
        
       </section>
+
+      {selectedReport && (
+        <div className="report-detail-layer" onClick={() => setSelectedReport(null)} role="presentation">
+          <div
+            className="report-detail-modal admin-report-detail"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Report details"
+          >
+            <button
+              type="button"
+              className="report-detail-modal__close"
+              onClick={() => setSelectedReport(null)}
+              aria-label="Close report details"
+            >
+              ×
+            </button>
+            <h3 className="report-detail-modal__title">{selectedReport.station_name}</h3>
+            <p className="report-detail-modal__fuel">{selectedReport.fuel_type}</p>
+            <p className="report-detail-modal__price">₱{Number(selectedReport.price).toFixed(2)}</p>
+            <p className="report-detail-modal__meta">
+              Votes: 👍 {selectedReport.upvotes || 0} · 👎 {selectedReport.downvotes || 0}
+            </p>
+            <p className="report-detail-modal__meta">
+              Reported: {selectedReport.reported_at || selectedReport.created_at || 'n/a'}
+            </p>
+            <p className="report-detail-modal__meta">Report ID: {selectedReport.id}</p>
+            {selectedReport.photo_url ? (
+              <img
+                src={selectedReport.photo_url}
+                alt="Uploaded report proof"
+                className="report-detail-modal__photo"
+              />
+            ) : (
+              <p className="report-detail-modal__meta">No uploaded photo.</p>
+            )}
+            <div className="admin-report-detail__actions">
+              <button type="button" className="btn-secondary" onClick={() => deleteReport(selectedReport)}>
+                Delete report
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
