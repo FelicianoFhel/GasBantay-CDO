@@ -7,7 +7,7 @@ import { fetchChatDataContext } from '../lib/chatDataContext';
 const PREDEFINED_QUESTIONS = [
   {
     label: 'Presyo duol nako',
-    text: 'Unsa ang available nga presyo sa gas duol nako karon? Gamita ang LIVE_APP_DATA aron ipakita ang mga estasyon, distansya, ug presyo sa Diesel, Regular, ug Premium.',
+    text: 'Unsa ang presyo sa gas nga duol nako karon? Tubaga pormal gamit ang LIVE_APP_DATA lang: kung dunay presyo, ipakita og tarong; kung wala, ipasabot ngano ug unsaon (lokasyon, pag-submit). Ayaw pagbuhat og tabla nga tanan “—”.',
   },
   {
     label: 'Unsaon pag-submit?',
