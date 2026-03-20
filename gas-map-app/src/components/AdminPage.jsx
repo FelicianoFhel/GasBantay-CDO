@@ -53,6 +53,7 @@ export default function AdminPage() {
   const [reports, setReports] = useState([]);
   const [reportsLoading, setReportsLoading] = useState(false);
   const [reportsError, setReportsError] = useState('');
+  const [voteDrafts, setVoteDrafts] = useState({});
 
   const isLoggedIn = Boolean(token);
   const reportGroups = useMemo(() => {
@@ -249,6 +250,34 @@ export default function AdminPage() {
     }
   };
 
+  const setVotesExact = async (report) => {
+    const draft = voteDrafts[report.id] || {};
+    const upvotes = Number.parseInt(String(draft.upvotes ?? report.upvotes ?? 0), 10);
+    const downvotes = Number.parseInt(String(draft.downvotes ?? report.downvotes ?? 0), 10);
+    if (!Number.isInteger(upvotes) || !Number.isInteger(downvotes) || upvotes < 0 || downvotes < 0) {
+      setReportsError('Votes must be whole numbers (0 or higher).');
+      return;
+    }
+    setReportsError('');
+    try {
+      const res = await fetch(`${apiBase()}/admin-reports`, {
+        method: 'PATCH',
+        headers: authHeaders,
+        body: JSON.stringify({
+          action: 'set_votes',
+          report_id: report.id,
+          upvotes,
+          downvotes,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to update votes');
+      await loadReports();
+    } catch (e) {
+      setReportsError(e.message || 'Failed to update votes');
+    }
+  };
+
   const setOfficial = async (reportId) => {
     setReportsError('');
     try {
@@ -422,32 +451,28 @@ export default function AdminPage() {
           ) : reportGroups.length === 0 ? (
             <p>No reports yet.</p>
           ) : (
-            reportGroups.map((group) => (
-              <div className="admin-table-wrap" key={group.station_id}>
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>Station</th>
-                      <th>Price</th>
-                      <th>Fuel</th>
-                      <th>Votes</th>
-                      <th>Official</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {group.fuels.map((r, idx) => (
+            <div className="admin-table-wrap">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Station</th>
+                    <th>Price</th>
+                    <th>Fuel</th>
+                    <th>Votes</th>
+                    <th>Official</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reportGroups.flatMap((group) =>
+                    group.fuels.map((r, idx) => (
                       <tr key={r.id}>
-                        <td>
-                          {idx === 0 ? (
-                            <>
-                              <strong>{group.station_name}</strong>
-                              <div className="admin-cell-sub">{group.station_address || '—'}</div>
-                            </>
-                          ) : (
-                            <span className="admin-cell-sub">↳ {group.station_name}</span>
-                          )}
-                        </td>
+                        {idx === 0 && (
+                          <td rowSpan={group.fuels.length}>
+                            <strong>{group.station_name}</strong>
+                            <div className="admin-cell-sub">{group.station_address || '—'}</div>
+                          </td>
+                        )}
                         <td>₱{Number(r.price).toFixed(2)}</td>
                         <td>{r.fuel_type}</td>
                         <td>
@@ -455,6 +480,43 @@ export default function AdminPage() {
                         </td>
                         <td>{r.is_official ? 'Yes' : 'No'}</td>
                         <td className="admin-table__actions">
+                          <input
+                            type="number"
+                            min="0"
+                            value={voteDrafts[r.id]?.upvotes ?? r.upvotes ?? 0}
+                            onChange={(e) =>
+                              setVoteDrafts((prev) => ({
+                                ...prev,
+                                [r.id]: {
+                                  ...(prev[r.id] || {}),
+                                  upvotes: e.target.value,
+                                  downvotes: prev[r.id]?.downvotes ?? r.downvotes ?? 0,
+                                },
+                              }))
+                            }
+                            aria-label={`Set upvotes for ${r.fuel_type}`}
+                            style={{ width: 68 }}
+                          />
+                          <input
+                            type="number"
+                            min="0"
+                            value={voteDrafts[r.id]?.downvotes ?? r.downvotes ?? 0}
+                            onChange={(e) =>
+                              setVoteDrafts((prev) => ({
+                                ...prev,
+                                [r.id]: {
+                                  ...(prev[r.id] || {}),
+                                  downvotes: e.target.value,
+                                  upvotes: prev[r.id]?.upvotes ?? r.upvotes ?? 0,
+                                },
+                              }))
+                            }
+                            aria-label={`Set downvotes for ${r.fuel_type}`}
+                            style={{ width: 68 }}
+                          />
+                          <button type="button" className="btn-secondary" onClick={() => setVotesExact(r)}>
+                            Apply
+                          </button>
                           <button type="button" className="btn-secondary" onClick={() => setVotes(r, 'up')}>
                             +👍
                           </button>
@@ -466,11 +528,11 @@ export default function AdminPage() {
                           </button>
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ))
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           )}
         </section>
       </section>
