@@ -553,6 +553,13 @@ html, body, #root {
   color: var(--color-text-secondary);
 }
 
+.station-panel__vote-feedback {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  color: var(--color-primary);
+}
+
 .report-row__main {
   display: inline-flex;
   align-items: center;

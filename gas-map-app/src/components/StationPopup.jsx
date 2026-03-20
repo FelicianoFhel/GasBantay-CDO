@@ -13,6 +13,18 @@ import SubmitPriceForm from './SubmitPriceForm';
 const RECENT_COLLAPSED = 3;
 const RECENT_MAX = 10;
 
+function wilsonLowerBound(upvotes, downvotes) {
+  const n = upvotes + downvotes;
+  if (n <= 0) return 0;
+  const z = 1.96; // 95% confidence
+  const p = upvotes / n;
+  const z2 = z * z;
+  const numerator =
+    p + z2 / (2 * n) - z * Math.sqrt((p * (1 - p) + z2 / (4 * n)) / n);
+  const denominator = 1 + z2 / n;
+  return numerator / denominator;
+}
+
 export default function StationPopup({ station, onClose, onReportSubmitted }) {
   const [reports, setReports] = useState([]);
   const [likeCounts, setLikeCounts] = useState({});
@@ -24,6 +36,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
   const [activeFuelTab, setActiveFuelTab] = useState(FUEL_TYPES[0].value);
   const [detailReport, setDetailReport] = useState(null);
   const [cooldownTick, setCooldownTick] = useState(0);
+  const [voteFeedback, setVoteFeedback] = useState(null);
   const voterId = getVoterId();
 
   useEffect(() => {
@@ -35,7 +48,14 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
     setReportsExpanded(false);
     setDetailReport(null);
     setActiveFuelTab(FUEL_TYPES[0].value);
+    setVoteFeedback(null);
   }, [station?.id]);
+
+  useEffect(() => {
+    if (!voteFeedback) return undefined;
+    const id = setTimeout(() => setVoteFeedback(null), 2200);
+    return () => clearTimeout(id);
+  }, [voteFeedback]);
 
   useEffect(() => {
     if (!detailReport) return;
@@ -129,15 +149,21 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
     fetchReports();
   }, [fetchReports]);
 
-  // Display the most trusted report per fuel type (likes - dislikes); if tie, use most recent
+  // Display the most trusted report per fuel using Wilson lower bound (better for low vote counts).
   const reportsWithVotes = reports.map((r) => {
     const likes = likeCounts[r.id] || 0;
     const dislikes = dislikeCounts[r.id] || 0;
-    return { ...r, likes, dislikes, score: likes - dislikes };
+    return {
+      ...r,
+      likes,
+      dislikes,
+      score: likes - dislikes,
+      trustScore: wilsonLowerBound(likes, dislikes),
+    };
   });
   const sortedByTrust = [...reportsWithVotes].sort(
     (a, b) =>
-      b.score - a.score ||
+      b.trustScore - a.trustScore ||
       b.likes - a.likes ||
       new Date(b.reported_at || b.created_at) - new Date(a.reported_at || a.created_at)
   );
@@ -150,6 +176,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
 
   const handleLike = async (reportId, fuelType) => {
     if (voteLocked && !myLikes.has(reportId) && !myDislikes.has(reportId)) {
+      setVoteFeedback(`Wait ${formatCooldownClock(voteCooldownMs)} before a new ${activeTabLabel} vote.`);
       return;
     }
     if (myLikes.has(reportId)) {
@@ -159,6 +186,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
         .eq('report_id', reportId)
         .eq('fingerprint', voterId);
       if (error) {
+        setVoteFeedback('Could not remove like. Please try again.');
         await fetchReports();
         return;
       }
@@ -172,6 +200,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
         [reportId]: Math.max(0, (c[reportId] || 0) - 1),
       }));
       startVoteCooldown(fuelType);
+      setVoteFeedback('Like removed.');
       await fetchReports();
       return;
     }
@@ -183,6 +212,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
         .eq('report_id', reportId)
         .eq('fingerprint', voterId);
       if (delDownErr) {
+        setVoteFeedback('Could not switch vote. Please try again.');
         await fetchReports();
         return;
       }
@@ -202,17 +232,20 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
       fingerprint: voterId,
     });
     if (error) {
+      setVoteFeedback('Could not save like. Please try again.');
       await fetchReports();
       return;
     }
     setMyLikes((s) => new Set(s).add(reportId));
     setLikeCounts((c) => ({ ...c, [reportId]: (c[reportId] || 0) + 1 }));
     startVoteCooldown(fuelType);
+    setVoteFeedback('Marked as helpful.');
     await fetchReports();
   };
 
   const handleDislike = async (reportId, fuelType) => {
     if (voteLocked && !myDislikes.has(reportId) && !myLikes.has(reportId)) {
+      setVoteFeedback(`Wait ${formatCooldownClock(voteCooldownMs)} before a new ${activeTabLabel} vote.`);
       return;
     }
     if (myDislikes.has(reportId)) {
@@ -222,6 +255,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
         .eq('report_id', reportId)
         .eq('fingerprint', voterId);
       if (error) {
+        setVoteFeedback('Could not remove downvote. Please try again.');
         await fetchReports();
         return;
       }
@@ -235,6 +269,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
         [reportId]: Math.max(0, (c[reportId] || 0) - 1),
       }));
       startVoteCooldown(fuelType);
+      setVoteFeedback('Downvote removed.');
       await fetchReports();
       return;
     }
@@ -246,6 +281,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
         .eq('report_id', reportId)
         .eq('fingerprint', voterId);
       if (delUpErr) {
+        setVoteFeedback('Could not switch vote. Please try again.');
         await fetchReports();
         return;
       }
@@ -265,12 +301,14 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
       fingerprint: voterId,
     });
     if (error) {
+      setVoteFeedback('Could not save downvote. Please try again.');
       await fetchReports();
       return;
     }
     setMyDislikes((s) => new Set(s).add(reportId));
     setDislikeCounts((c) => ({ ...c, [reportId]: (c[reportId] || 0) + 1 }));
     startVoteCooldown(fuelType);
+    setVoteFeedback('Marked as not accurate.');
     await fetchReports();
   };
 
@@ -367,7 +405,12 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
             </div>
             {voteLocked && (
               <p className="station-panel__vote-cooldown" role="status">
-                Next {activeTabLabel} vote in {formatCooldownClock(voteCooldownMs)}
+                New {activeTabLabel} votes in {formatCooldownClock(voteCooldownMs)}. You can still switch/remove your current vote.
+              </p>
+            )}
+            {voteFeedback && (
+              <p className="station-panel__vote-feedback" role="status">
+                {voteFeedback}
               </p>
             )}
             {loading ? null : reports.length === 0 ? null : (
@@ -455,6 +498,12 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
                                 !myDislikes.has(r.id)
                               }
                               className={`vote-btn vote-btn--like ${myLikes.has(r.id) ? 'is-active' : ''}`}
+                              aria-pressed={myLikes.has(r.id)}
+                              aria-label={
+                                myLikes.has(r.id)
+                                  ? `Remove helpful vote. Current helpful votes: ${likeCounts[r.id] || 0}`
+                                  : `Mark report as helpful. Current helpful votes: ${likeCounts[r.id] || 0}`
+                              }
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleLike(r.id, r.fuel_type);
@@ -477,6 +526,12 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
                                 !myLikes.has(r.id)
                               }
                               className={`vote-btn vote-btn--dislike ${myDislikes.has(r.id) ? 'is-active' : ''}`}
+                              aria-pressed={myDislikes.has(r.id)}
+                              aria-label={
+                                myDislikes.has(r.id)
+                                  ? `Remove not accurate vote. Current not accurate votes: ${dislikeCounts[r.id] || 0}`
+                                  : `Mark report as not accurate. Current not accurate votes: ${dislikeCounts[r.id] || 0}`
+                              }
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleDislike(r.id, r.fuel_type);
