@@ -417,48 +417,6 @@ export default function AdminPage() {
           {error && <p className="admin-error">{error}</p>}
         </section>
 
-        <section className="admin-panel">
-          <h2>Stations ({stations.length})</h2>
-          {loading ? (
-            <p>Loading stations…</p>
-          ) : (
-            <div className="admin-table-wrap">
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Address</th>
-                    <th>Lat</th>
-                    <th>Lng</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stations.map((s) => (
-                    <tr key={s.id}>
-                      <td>{s.name}</td>
-                      <td>{s.address || '—'}</td>
-                      <td>{s.lat}</td>
-                      <td>{s.lng}</td>
-                      <td className="admin-table__actions">
-                        <button type="button" className="btn-secondary" onClick={() => onEdit(s)}>
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          onClick={() => onDelete(s.id)}
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
 
         <section className="admin-panel">
           <h2>Price Reports ({reportGroups.length} stations)</h2>
@@ -555,6 +513,56 @@ export default function AdminPage() {
             </div>
           )}
         </section>
+
+
+
+
+
+
+        <section className="admin-panel">
+          <h2>Stations ({stations.length})</h2>
+          {loading ? (
+            <p>Loading stations…</p>
+          ) : (
+            <div className="admin-table-wrap">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Address</th>
+                    <th>Lat</th>
+                    <th>Lng</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stations.map((s) => (
+                    <tr key={s.id}>
+                      <td>{s.name}</td>
+                      <td>{s.address || '—'}</td>
+                      <td>{s.lat}</td>
+                      <td>{s.lng}</td>
+                      <td className="admin-table__actions">
+                        <button type="button" className="btn-secondary" onClick={() => onEdit(s)}>
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => onDelete(s.id)}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+       
       </section>
     </main>
   );
