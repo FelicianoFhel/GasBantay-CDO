@@ -213,7 +213,7 @@ export default function Dashboard({
     if (!withDist.length) return [];
     return [...withDist]
       .sort((a, b) => a.distance - b.distance)
-      .slice(0, 10)
+      .slice(0, 4)
       .map((s) => ({
         ...s,
         photoUrl: bestPhotoByStation[s.id],
@@ -222,7 +222,6 @@ export default function Dashboard({
 
   const cheapestList = userPosition ? getCheapestNearMe() : [];
   const nearMeList = userPosition ? getNearMe() : [];
-  const withPhotosCount = reports.filter((r) => Boolean(r.photo_url)).length;
 
   const fuelMarketStats = useMemo(() => {
     const stationIdsSet = new Set((stations || []).map((s) => s.id));
@@ -343,20 +342,6 @@ export default function Dashboard({
           ))}
         </div>
 
-        <div className="dashboard-stats">
-          <article className="dashboard-stat">
-            <span className="dashboard-stat__label">Stations</span>
-            <strong className="dashboard-stat__value">{stations.length}</strong>
-          </article>
-          <article className="dashboard-stat">
-            <span className="dashboard-stat__label">Price reports</span>
-            <strong className="dashboard-stat__value">{reports.length}</strong>
-          </article>
-          <article className="dashboard-stat">
-            <span className="dashboard-stat__label">Reports with photos</span>
-            <strong className="dashboard-stat__value">{withPhotosCount}</strong>
-          </article>
-        </div>
         {locationError && <p className="form-msg error">{locationError}</p>}
       </section>
 
