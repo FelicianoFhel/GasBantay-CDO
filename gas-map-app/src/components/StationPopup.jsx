@@ -1,9 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { getVoterId } from '../lib/fingerprint';
 import { formatUpdatedAt } from '../lib/relativeTime';
+import {
+  getVoteCooldownRemainingMs,
+  startVoteCooldown,
+  formatCooldownClock,
+} from '../lib/voteCooldown';
 import { FUEL_TYPES } from '../constants';
 import SubmitPriceForm from './SubmitPriceForm';
+
+const RECENT_COLLAPSED = 3;
+const RECENT_MAX = 10;
 
 export default function StationPopup({ station, onClose, onReportSubmitted }) {
   const [reports, setReports] = useState([]);
@@ -12,7 +20,35 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
   const [myLikes, setMyLikes] = useState(new Set());
   const [myDislikes, setMyDislikes] = useState(new Set());
   const [loading, setLoading] = useState(true);
+  const [reportsExpanded, setReportsExpanded] = useState(false);
+  const [detailReport, setDetailReport] = useState(null);
+  const [cooldownTick, setCooldownTick] = useState(0);
   const voterId = getVoterId();
+
+  useEffect(() => {
+    const id = setInterval(() => setCooldownTick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    setReportsExpanded(false);
+    setDetailReport(null);
+  }, [station?.id]);
+
+  useEffect(() => {
+    if (!detailReport) return;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setDetailReport(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [detailReport]);
+
+  const voteCooldownMs = useMemo(
+    () => getVoteCooldownRemainingMs(),
+    [cooldownTick]
+  );
+  const voteLocked = voteCooldownMs > 0;
 
   const fetchReports = useCallback(async () => {
     if (!station?.id) return;
@@ -128,6 +164,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
         ...c,
         [reportId]: Math.max(0, (c[reportId] || 0) - 1),
       }));
+      startVoteCooldown();
       return;
     }
 
@@ -162,6 +199,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
     }
     setMyLikes((s) => new Set(s).add(reportId));
     setLikeCounts((c) => ({ ...c, [reportId]: (c[reportId] || 0) + 1 }));
+    startVoteCooldown();
   };
 
   const handleDislike = async (reportId) => {
@@ -184,6 +222,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
         ...c,
         [reportId]: Math.max(0, (c[reportId] || 0) - 1),
       }));
+      startVoteCooldown();
       return;
     }
 
@@ -218,7 +257,18 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
     }
     setMyDislikes((s) => new Set(s).add(reportId));
     setDislikeCounts((c) => ({ ...c, [reportId]: (c[reportId] || 0) + 1 }));
+    startVoteCooldown();
   };
+
+  const openReportDetail = (r, e) => {
+    e?.stopPropagation();
+    setDetailReport(r);
+  };
+
+  const recentSlice = reportsExpanded
+    ? sortedByTrust.slice(0, RECENT_MAX)
+    : sortedByTrust.slice(0, RECENT_COLLAPSED);
+  const hasMoreReports = sortedByTrust.length > RECENT_COLLAPSED;
 
   return (
     <div
@@ -282,44 +332,97 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
 
           <section className="station-panel__section">
             <h3 className="station-panel__section-title">Recent reports</h3>
+            {voteLocked && (
+              <p className="station-panel__vote-cooldown" role="status">
+                Next vote in {formatCooldownClock(voteCooldownMs)}
+              </p>
+            )}
             {loading ? null : reports.length === 0 ? null : (
-              <ul className="report-list">
-                {sortedByTrust.slice(0, 10).map((r) => (
-                  <li key={r.id} className="report-row">
-                    <span className="report-row__main">
-                      {r.photo_url && (
-                        <img
-                          src={r.photo_url}
-                          alt=""
-                          className="report-row__thumb"
-                        />
-                      )}
-                      <span>
-                        {FUEL_TYPES.find((f) => f.value === r.fuel_type)?.label || r.fuel_type} ₱
-                        {Number(r.price).toFixed(2)} — {formatUpdatedAt(r.reported_at || r.created_at)}
+              <>
+                <ul className="report-list">
+                  {recentSlice.map((r) => (
+                    <li key={r.id} className="report-row">
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        className="report-row__main report-row__main--clickable"
+                        onClick={(e) => openReportDetail(r, e)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            openReportDetail(r, e);
+                          }
+                        }}
+                      >
+                        {r.photo_url ? (
+                          <img
+                            src={r.photo_url}
+                            alt=""
+                            className="report-row__thumb"
+                          />
+                        ) : (
+                          <span
+                            className="report-row__thumb report-row__thumb--placeholder"
+                            aria-hidden
+                          />
+                        )}
+                        <span className="report-row__text">
+                          {FUEL_TYPES.find((f) => f.value === r.fuel_type)?.label || r.fuel_type}{' '}
+                          ₱{Number(r.price).toFixed(2)} —{' '}
+                          {formatUpdatedAt(r.reported_at || r.created_at)}
+                        </span>
+                      </div>
+                      <span className="vote-wrap">
+                        <button
+                          type="button"
+                          disabled={voteLocked}
+                          className={`vote-btn vote-btn--like ${myLikes.has(r.id) ? 'is-active' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!voteLocked) handleLike(r.id);
+                          }}
+                          title={
+                            voteLocked
+                              ? `Wait ${formatCooldownClock(voteCooldownMs)}`
+                              : myLikes.has(r.id)
+                                ? 'Remove like'
+                                : 'Like'
+                          }
+                        >
+                          👍 {likeCounts[r.id] || 0}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={voteLocked}
+                          className={`vote-btn vote-btn--dislike ${myDislikes.has(r.id) ? 'is-active' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!voteLocked) handleDislike(r.id);
+                          }}
+                          title={
+                            voteLocked
+                              ? `Wait ${formatCooldownClock(voteCooldownMs)}`
+                              : myDislikes.has(r.id)
+                                ? 'Remove dislike'
+                                : 'Dislike'
+                          }
+                        >
+                          👎 {dislikeCounts[r.id] || 0}
+                        </button>
                       </span>
-                    </span>
-                    <span className="vote-wrap">
-                      <button
-                        type="button"
-                        className={`vote-btn vote-btn--like ${myLikes.has(r.id) ? 'is-active' : ''}`}
-                        onClick={() => handleLike(r.id)}
-                        title={myLikes.has(r.id) ? 'Remove like' : 'Like'}
-                      >
-                        👍 {likeCounts[r.id] || 0}
-                      </button>
-                      <button
-                        type="button"
-                        className={`vote-btn vote-btn--dislike ${myDislikes.has(r.id) ? 'is-active' : ''}`}
-                        onClick={() => handleDislike(r.id)}
-                        title={myDislikes.has(r.id) ? 'Remove dislike' : 'Dislike'}
-                      >
-                        👎 {dislikeCounts[r.id] || 0}
-                      </button>
-                    </span>
-                  </li>
-                ))}
-              </ul>
+                    </li>
+                  ))}
+                </ul>
+                {hasMoreReports && (
+                  <button
+                    type="button"
+                    className="report-list__more"
+                    onClick={() => setReportsExpanded((v) => !v)}
+                  >
+                    {reportsExpanded ? 'Show less' : 'See more'}
+                  </button>
+                )}
+              </>
             )}
           </section>
 
@@ -333,6 +436,58 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
           />
         </div>
       </div>
+
+      {detailReport && (
+        <div
+          className="report-detail-layer"
+          onClick={(e) => {
+            e.stopPropagation();
+            setDetailReport(null);
+          }}
+          role="presentation"
+        >
+          <div
+            className="report-detail-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="report-detail-heading"
+          >
+            <button
+              type="button"
+              className="report-detail-modal__close"
+              onClick={() => setDetailReport(null)}
+              aria-label="Close report details"
+            >
+              ×
+            </button>
+            <h3 id="report-detail-heading" className="report-detail-modal__title">
+              {station.name}
+            </h3>
+            <p className="report-detail-modal__fuel">
+              {FUEL_TYPES.find((f) => f.value === detailReport.fuel_type)?.label ||
+                detailReport.fuel_type}
+            </p>
+            <p className="report-detail-modal__price">
+              ₱{Number(detailReport.price).toFixed(2)}
+            </p>
+            <p className="report-detail-modal__meta">
+              Reported {formatUpdatedAt(detailReport.reported_at || detailReport.created_at)}
+            </p>
+            {detailReport.photo_url && (
+              <img
+                src={detailReport.photo_url}
+                alt="Price photo"
+                className="report-detail-modal__photo"
+              />
+            )}
+            <p className="report-detail-modal__votes">
+              👍 {likeCounts[detailReport.id] ?? detailReport.likes ?? 0} · 👎{' '}
+              {dislikeCounts[detailReport.id] ?? detailReport.dislikes ?? 0}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
