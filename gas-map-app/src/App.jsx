@@ -7,7 +7,42 @@ import ChatAssistant from './components/ChatAssistant';
 import PrivacyModal from './components/PrivacyModal';
 import { isSupabaseConfigured } from './lib/supabaseClient';
 import { supabase } from './lib/supabaseClient';
-import { getUserPosition } from './lib/geo';
+import { getUserPosition, haversine } from './lib/geo';
+
+function trustedByStationFromReports(reports, upvoteCounts, downvoteCounts) {
+  const scored = reports.map((r) => ({
+    ...r,
+    likes: upvoteCounts[r.id] || 0,
+    dislikes: downvoteCounts[r.id] || 0,
+    score: (upvoteCounts[r.id] || 0) - (downvoteCounts[r.id] || 0),
+  }));
+  scored.sort(
+    (a, b) =>
+      b.score - a.score ||
+      b.likes - a.likes ||
+      new Date(b.reported_at || b.created_at) - new Date(a.reported_at || a.created_at)
+  );
+  const byStationFuel = {};
+  for (const r of scored) {
+    if (!byStationFuel[r.station_id]) byStationFuel[r.station_id] = {};
+    if (!byStationFuel[r.station_id][r.fuel_type]) byStationFuel[r.station_id][r.fuel_type] = r;
+  }
+  const byStation = {};
+  Object.entries(byStationFuel).forEach(([stationId, fuels]) => {
+    const trusted = Object.values(fuels).map((r) => ({
+      fuelType: r.fuel_type,
+      price: Number(r.price),
+    }));
+    const valid = trusted.filter((r) => Number.isFinite(r.price));
+    if (!valid.length) return;
+    valid.sort((a, b) => a.price - b.price);
+    byStation[stationId] = {
+      bestPrice: valid[0].price,
+      bestFuelType: valid[0].fuelType,
+    };
+  });
+  return byStation;
+}
 
 function filterStationsBySearch(stations, query) {
   if (!query || !query.trim()) return stations;
@@ -30,11 +65,82 @@ export default function App() {
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState(null);
   const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [mapExplorerView, setMapExplorerView] = useState('map');
+  const [trustedByStation, setTrustedByStation] = useState({});
 
   const filteredStations = useMemo(
     () => filterStationsBySearch(stations, searchQuery),
     [stations, searchQuery]
   );
+
+  const mapStations = useMemo(
+    () =>
+      filteredStations.map((s) => ({
+        ...s,
+        badgePrice: trustedByStation[s.id]?.bestPrice ?? null,
+        badgeFuelType: trustedByStation[s.id]?.bestFuelType ?? null,
+      })),
+    [filteredStations, trustedByStation]
+  );
+
+  const compactListStations = useMemo(() => {
+    const list = mapStations.map((s) => {
+      const distance =
+        userPosition && s.lat != null && s.lng != null
+          ? haversine(userPosition.lat, userPosition.lng, Number(s.lat), Number(s.lng))
+          : null;
+      return { ...s, distance };
+    });
+    return list
+      .sort((a, b) => {
+        const aHas = Number.isFinite(a.badgePrice);
+        const bHas = Number.isFinite(b.badgePrice);
+        if (aHas !== bHas) return bHas ? 1 : -1;
+        if (userPosition && a.distance != null && b.distance != null) {
+          return a.distance - b.distance;
+        }
+        return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' });
+      })
+      .slice(0, 14);
+  }, [mapStations, userPosition]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !filteredStations.length) {
+      setTrustedByStation({});
+      return;
+    }
+    const stationIds = filteredStations.map((s) => s.id);
+    (async () => {
+      const { data: reportsData, error } = await supabase
+        .from('price_reports')
+        .select('*')
+        .in('station_id', stationIds)
+        .order('reported_at', { ascending: false });
+      if (error || !reportsData?.length) {
+        setTrustedByStation({});
+        return;
+      }
+      const reportIds = reportsData.map((r) => r.id);
+      const { data: up } = await supabase.from('upvotes').select('report_id').in('report_id', reportIds);
+      const { data: down } = await supabase
+        .from('downvotes')
+        .select('report_id')
+        .in('report_id', reportIds);
+      const upCounts = {};
+      const downCounts = {};
+      reportIds.forEach((id) => {
+        upCounts[id] = 0;
+        downCounts[id] = 0;
+      });
+      (up || []).forEach((u) => {
+        upCounts[u.report_id] = (upCounts[u.report_id] || 0) + 1;
+      });
+      (down || []).forEach((d) => {
+        downCounts[d.report_id] = (downCounts[d.report_id] || 0) + 1;
+      });
+      setTrustedByStation(trustedByStationFromReports(reportsData, upCounts, downCounts));
+    })();
+  }, [filteredStations, reportsInvalidatedAt]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -129,15 +235,65 @@ export default function App() {
                 : 'Tap any marker to open trusted reports and submit updates.'}
             </p>
           </div>
-          <div className="map-wrap-inline">
-            <Map
-              stations={filteredStations}
-              loading={stationsLoading}
-              error={stationsError}
-              selectedStationId={selectedStation?.id}
-              onSelectStation={handleSelectStation}
-            />
+          <div className="map-list-segment" role="tablist" aria-label="Map explorer view">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mapExplorerView === 'map'}
+              className={`map-list-segment__btn ${mapExplorerView === 'map' ? 'is-active' : ''}`}
+              onClick={() => setMapExplorerView('map')}
+            >
+              Map
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mapExplorerView === 'list'}
+              className={`map-list-segment__btn ${mapExplorerView === 'list' ? 'is-active' : ''}`}
+              onClick={() => setMapExplorerView('list')}
+            >
+              List
+            </button>
           </div>
+          {mapExplorerView === 'map' ? (
+            <div className="map-wrap-inline">
+              <Map
+                stations={mapStations}
+                loading={stationsLoading}
+                error={stationsError}
+                selectedStationId={selectedStation?.id}
+                onSelectStation={handleSelectStation}
+              />
+            </div>
+          ) : (
+            <div className="map-compact-list" role="tabpanel" aria-label="Station list view">
+              {compactListStations.map((s) => (
+                <button
+                  key={`${s.id}-compact`}
+                  type="button"
+                  className="map-compact-list__item"
+                  onClick={() => handleSelectStation(s)}
+                >
+                  <span className="map-compact-list__name">{s.name}</span>
+                  <span className="map-compact-list__meta">
+                    {s.distance != null ? `${s.distance.toFixed(1)} km` : 'CDO'}
+                  </span>
+                  <span className="map-compact-list__fuel">
+                    {s.badgeFuelType?.includes('diesel')
+                      ? 'Diesel'
+                      : s.badgeFuelType?.includes('regular')
+                        ? 'Unleaded'
+                        : s.badgeFuelType?.includes('premium')
+                          ? 'Premium'
+                          : 'No report'}
+                  </span>
+                  <strong className="map-compact-list__price">
+                    {Number.isFinite(s.badgePrice) ? `₱${s.badgePrice.toFixed(2)}` : '—'}
+                  </strong>
+                </button>
+              ))}
+            </div>
+          )}
         </section>
         <footer className="app-footer" role="contentinfo">
           <div className="app-footer__inner">
