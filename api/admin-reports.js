@@ -42,6 +42,10 @@ function parseBody(req) {
   return req.body || {};
 }
 
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 async function getVoteCounts(reportIds) {
   if (!reportIds.length) return { up: {}, down: {} };
   const [upOut, downOut] = await Promise.all([
@@ -54,10 +58,16 @@ async function getVoteCounts(reportIds) {
     up[id] = 0;
     down[id] = 0;
   });
-  (upOut.data || []).forEach((r) => {
+  if (!upOut.res.ok && !isMissingRelation(upOut)) {
+    throw new Error('Failed to load upvotes');
+  }
+  if (!downOut.res.ok && !isMissingRelation(downOut)) {
+    throw new Error('Failed to load downvotes');
+  }
+  asArray(upOut.data).forEach((r) => {
     up[r.report_id] = (up[r.report_id] || 0) + 1;
   });
-  (downOut.data || []).forEach((r) => {
+  asArray(downOut.data).forEach((r) => {
     down[r.report_id] = (down[r.report_id] || 0) + 1;
   });
   return { up, down };
@@ -133,11 +143,11 @@ export default async function handler(req, res) {
           ? officialOutRaw
           : { data: [] };
       const byStation = {};
-      (stationsOut.data || []).forEach((s) => {
+      asArray(stationsOut.data).forEach((s) => {
         byStation[s.id] = s;
       });
       const officialMap = {};
-      (officialOut.data || []).forEach((o) => {
+      asArray(officialOut.data).forEach((o) => {
         officialMap[`${o.station_id}:${o.fuel_type}`] = o;
       });
       const reportIds = reports.map((r) => r.id);
