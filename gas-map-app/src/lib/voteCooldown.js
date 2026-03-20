@@ -1,9 +1,24 @@
-const STORAGE_KEY = 'cdo_gas_vote_cooldown_until';
-const COOLDOWN_MS = 5 * 60 * 1000;
+import { FUEL_TYPES } from '../constants';
 
-export function getVoteCooldownRemainingMs() {
+const COOLDOWN_MS = 5 * 60 * 1000;
+const PREFIX = 'cdo_gas_vote_cooldown_until_';
+
+const ALLOWED = new Set(FUEL_TYPES.map((f) => f.value));
+
+function normalizeFuel(fuelType) {
+  return fuelType && ALLOWED.has(fuelType) ? fuelType : null;
+}
+
+function keyFor(fuelType) {
+  const f = normalizeFuel(fuelType);
+  return f ? PREFIX + f : null;
+}
+
+export function getVoteCooldownRemainingMs(fuelType) {
+  const key = keyFor(fuelType);
+  if (!key) return 0;
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
+    const raw = sessionStorage.getItem(key);
     if (!raw) return 0;
     const until = parseInt(raw, 10);
     if (Number.isNaN(until)) return 0;
@@ -13,10 +28,12 @@ export function getVoteCooldownRemainingMs() {
   }
 }
 
-/** Call after any successful vote API action (like, dislike, or remove). */
-export function startVoteCooldown() {
+/** After a successful vote on a report of this fuel type. */
+export function startVoteCooldown(fuelType) {
+  const key = keyFor(fuelType);
+  if (!key) return;
   try {
-    sessionStorage.setItem(STORAGE_KEY, String(Date.now() + COOLDOWN_MS));
+    sessionStorage.setItem(key, String(Date.now() + COOLDOWN_MS));
   } catch {
     /* ignore */
   }

@@ -47,10 +47,12 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
   }, [detailReport]);
 
   const voteCooldownMs = useMemo(
-    () => getVoteCooldownRemainingMs(),
-    [cooldownTick]
+    () => getVoteCooldownRemainingMs(activeFuelTab),
+    [cooldownTick, activeFuelTab]
   );
   const voteLocked = voteCooldownMs > 0;
+  const activeTabLabel =
+    FUEL_TYPES.find((f) => f.value === activeFuelTab)?.tabLabel || 'This fuel';
 
   const fetchReports = useCallback(async () => {
     if (!station?.id) return;
@@ -146,7 +148,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
   const topReport = sortedByTrust[0];
   const updatedAt = topReport?.reported_at || topReport?.created_at;
 
-  const handleLike = async (reportId) => {
+  const handleLike = async (reportId, fuelType) => {
     if (myLikes.has(reportId)) {
       const { error } = await supabase
         .from('upvotes')
@@ -166,7 +168,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
         ...c,
         [reportId]: Math.max(0, (c[reportId] || 0) - 1),
       }));
-      startVoteCooldown();
+      startVoteCooldown(fuelType);
       return;
     }
 
@@ -201,10 +203,10 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
     }
     setMyLikes((s) => new Set(s).add(reportId));
     setLikeCounts((c) => ({ ...c, [reportId]: (c[reportId] || 0) + 1 }));
-    startVoteCooldown();
+    startVoteCooldown(fuelType);
   };
 
-  const handleDislike = async (reportId) => {
+  const handleDislike = async (reportId, fuelType) => {
     if (myDislikes.has(reportId)) {
       const { error } = await supabase
         .from('downvotes')
@@ -224,7 +226,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
         ...c,
         [reportId]: Math.max(0, (c[reportId] || 0) - 1),
       }));
-      startVoteCooldown();
+      startVoteCooldown(fuelType);
       return;
     }
 
@@ -259,7 +261,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
     }
     setMyDislikes((s) => new Set(s).add(reportId));
     setDislikeCounts((c) => ({ ...c, [reportId]: (c[reportId] || 0) + 1 }));
-    startVoteCooldown();
+    startVoteCooldown(fuelType);
   };
 
   const openReportDetail = (r, e) => {
@@ -355,7 +357,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
             </div>
             {voteLocked && (
               <p className="station-panel__vote-cooldown" role="status">
-                Next vote in {formatCooldownClock(voteCooldownMs)}
+                Next {activeTabLabel} vote in {formatCooldownClock(voteCooldownMs)}
               </p>
             )}
             {loading ? null : reports.length === 0 ? null : (
@@ -441,7 +443,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
                               className={`vote-btn vote-btn--like ${myLikes.has(r.id) ? 'is-active' : ''}`}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (!voteLocked) handleLike(r.id);
+                                if (!voteLocked) handleLike(r.id, r.fuel_type);
                               }}
                               title={
                                 voteLocked
@@ -459,7 +461,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
                               className={`vote-btn vote-btn--dislike ${myDislikes.has(r.id) ? 'is-active' : ''}`}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (!voteLocked) handleDislike(r.id);
+                                if (!voteLocked) handleDislike(r.id, r.fuel_type);
                               }}
                               title={
                                 voteLocked
