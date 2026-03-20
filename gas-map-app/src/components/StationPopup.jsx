@@ -21,6 +21,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
   const [myDislikes, setMyDislikes] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [reportsExpanded, setReportsExpanded] = useState(false);
+  const [activeFuelTab, setActiveFuelTab] = useState(FUEL_TYPES[0].value);
   const [detailReport, setDetailReport] = useState(null);
   const [cooldownTick, setCooldownTick] = useState(0);
   const voterId = getVoterId();
@@ -33,6 +34,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
   useEffect(() => {
     setReportsExpanded(false);
     setDetailReport(null);
+    setActiveFuelTab(FUEL_TYPES[0].value);
   }, [station?.id]);
 
   useEffect(() => {
@@ -265,10 +267,24 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
     setDetailReport(r);
   };
 
+  const reportsByFuel = useMemo(() => {
+    const buckets = Object.fromEntries(FUEL_TYPES.map(({ value }) => [value, []]));
+    for (const r of sortedByTrust) {
+      if (buckets[r.fuel_type]) buckets[r.fuel_type].push(r);
+    }
+    return buckets;
+  }, [sortedByTrust]);
+
+  const fuelList = reportsByFuel[activeFuelTab] ?? [];
   const recentSlice = reportsExpanded
-    ? sortedByTrust.slice(0, RECENT_MAX)
-    : sortedByTrust.slice(0, RECENT_COLLAPSED);
-  const hasMoreReports = sortedByTrust.length > RECENT_COLLAPSED;
+    ? fuelList.slice(0, RECENT_MAX)
+    : fuelList.slice(0, RECENT_COLLAPSED);
+  const hasMoreReports = fuelList.length > RECENT_COLLAPSED;
+
+  const selectFuelTab = (value) => {
+    setActiveFuelTab(value);
+    setReportsExpanded(false);
+  };
 
   return (
     <div
@@ -330,8 +346,13 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
             )}
           </section>
 
-          <section className="station-panel__section">
-            <h3 className="station-panel__section-title">Recent reports</h3>
+          <section className="station-panel__section station-panel__section--reports">
+            <div className="station-panel__section-head">
+              <h3 className="station-panel__section-title">Recent reports</h3>
+              <p className="station-panel__section-sub">
+                Browse by fuel type — tap a row for full details
+              </p>
+            </div>
             {voteLocked && (
               <p className="station-panel__vote-cooldown" role="status">
                 Next vote in {formatCooldownClock(voteCooldownMs)}
@@ -339,89 +360,132 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
             )}
             {loading ? null : reports.length === 0 ? null : (
               <>
-                <ul className="report-list">
-                  {recentSlice.map((r) => (
-                    <li key={r.id} className="report-row">
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        className="report-row__main report-row__main--clickable"
-                        onClick={(e) => openReportDetail(r, e)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            openReportDetail(r, e);
-                          }
-                        }}
+                <div
+                  className="report-fuel-tabs"
+                  role="tablist"
+                  aria-label="Filter reports by fuel"
+                >
+                  {FUEL_TYPES.map(({ value, tabLabel }) => {
+                    const count = reportsByFuel[value]?.length ?? 0;
+                    const isActive = activeFuelTab === value;
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        role="tab"
+                        id={`fuel-tab-${value}`}
+                        aria-selected={isActive}
+                        aria-controls={`fuel-panel-${value}`}
+                        tabIndex={isActive ? 0 : -1}
+                        className={`report-fuel-tab ${isActive ? 'is-active' : ''} ${count === 0 ? 'is-empty' : ''}`}
+                        onClick={() => selectFuelTab(value)}
                       >
-                        {r.photo_url ? (
-                          <img
-                            src={r.photo_url}
-                            alt=""
-                            className="report-row__thumb"
-                          />
-                        ) : (
-                          <span
-                            className="report-row__thumb report-row__thumb--placeholder"
-                            aria-hidden
-                          />
-                        )}
-                        <span className="report-row__text">
-                          {FUEL_TYPES.find((f) => f.value === r.fuel_type)?.label || r.fuel_type}{' '}
-                          ₱{Number(r.price).toFixed(2)} —{' '}
-                          {formatUpdatedAt(r.reported_at || r.created_at)}
-                        </span>
-                      </div>
-                      <span className="vote-wrap">
-                        <button
-                          type="button"
-                          disabled={voteLocked}
-                          className={`vote-btn vote-btn--like ${myLikes.has(r.id) ? 'is-active' : ''}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!voteLocked) handleLike(r.id);
-                          }}
-                          title={
-                            voteLocked
-                              ? `Wait ${formatCooldownClock(voteCooldownMs)}`
-                              : myLikes.has(r.id)
-                                ? 'Remove like'
-                                : 'Like'
-                          }
-                        >
-                          👍 {likeCounts[r.id] || 0}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={voteLocked}
-                          className={`vote-btn vote-btn--dislike ${myDislikes.has(r.id) ? 'is-active' : ''}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!voteLocked) handleDislike(r.id);
-                          }}
-                          title={
-                            voteLocked
-                              ? `Wait ${formatCooldownClock(voteCooldownMs)}`
-                              : myDislikes.has(r.id)
-                                ? 'Remove dislike'
-                                : 'Dislike'
-                          }
-                        >
-                          👎 {dislikeCounts[r.id] || 0}
-                        </button>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                {hasMoreReports && (
-                  <button
-                    type="button"
-                    className="report-list__more"
-                    onClick={() => setReportsExpanded((v) => !v)}
-                  >
-                    {reportsExpanded ? 'Show less' : 'See more'}
-                  </button>
-                )}
+                        <span className="report-fuel-tab__label">{tabLabel}</span>
+                        <span className="report-fuel-tab__count">{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div
+                  id={`fuel-panel-${activeFuelTab}`}
+                  role="tabpanel"
+                  aria-labelledby={`fuel-tab-${activeFuelTab}`}
+                  className="report-fuel-panel"
+                >
+                  {fuelList.length === 0 ? (
+                    <p className="station-panel__muted report-fuel-panel__empty">
+                      No {FUEL_TYPES.find((f) => f.value === activeFuelTab)?.tabLabel}{' '}
+                      reports yet for this station.
+                    </p>
+                  ) : (
+                    <ul className="report-list report-list--by-fuel">
+                      {recentSlice.map((r) => (
+                        <li key={r.id} className="report-row report-row--card">
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            className="report-row__main report-row__main--clickable"
+                            onClick={(e) => openReportDetail(r, e)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                openReportDetail(r, e);
+                              }
+                            }}
+                          >
+                            {r.photo_url ? (
+                              <img
+                                src={r.photo_url}
+                                alt=""
+                                className="report-row__thumb"
+                              />
+                            ) : (
+                              <span
+                                className="report-row__thumb report-row__thumb--placeholder"
+                                aria-hidden
+                              />
+                            )}
+                            <div className="report-row__content">
+                              <span className="report-row__price">
+                                ₱{Number(r.price).toFixed(2)}
+                              </span>
+                              <span className="report-row__when">
+                                {formatUpdatedAt(r.reported_at || r.created_at)}
+                              </span>
+                            </div>
+                          </div>
+                          <span className="vote-wrap">
+                            <button
+                              type="button"
+                              disabled={voteLocked}
+                              className={`vote-btn vote-btn--like ${myLikes.has(r.id) ? 'is-active' : ''}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!voteLocked) handleLike(r.id);
+                              }}
+                              title={
+                                voteLocked
+                                  ? `Wait ${formatCooldownClock(voteCooldownMs)}`
+                                  : myLikes.has(r.id)
+                                    ? 'Remove like'
+                                    : 'Like'
+                              }
+                            >
+                              👍 {likeCounts[r.id] || 0}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={voteLocked}
+                              className={`vote-btn vote-btn--dislike ${myDislikes.has(r.id) ? 'is-active' : ''}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!voteLocked) handleDislike(r.id);
+                              }}
+                              title={
+                                voteLocked
+                                  ? `Wait ${formatCooldownClock(voteCooldownMs)}`
+                                  : myDislikes.has(r.id)
+                                    ? 'Remove dislike'
+                                    : 'Dislike'
+                              }
+                            >
+                              👎 {dislikeCounts[r.id] || 0}
+                            </button>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {hasMoreReports && (
+                    <button
+                      type="button"
+                      className="report-list__more"
+                      onClick={() => setReportsExpanded((v) => !v)}
+                    >
+                      {reportsExpanded ? 'Show less' : 'See more'}
+                    </button>
+                  )}
+                </div>
               </>
             )}
           </section>

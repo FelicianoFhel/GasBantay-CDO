@@ -7,9 +7,9 @@ export const CDO_BOUNDS = [
 ];
 
 export const FUEL_TYPES = [
-  { value: 'diesel', label: 'Diesel' },
-  { value: 'regular_green', label: 'Regular(Green)' },
-  { value: 'premium_red', label: 'Premium(Red)' },
+  { value: 'diesel', label: 'Diesel', tabLabel: 'Diesel' },
+  { value: 'regular_green', label: 'Regular(Green)', tabLabel: 'Regular' },
+  { value: 'premium_red', label: 'Premium(Red)', tabLabel: 'Premium' },
 ];
 
 export const PRICE_MIN = 50;
