@@ -7,17 +7,37 @@ import { fetchChatDataContext } from '../lib/chatDataContext';
 const PREDEFINED_QUESTIONS = [
   {
     label: 'Presyo duol nako',
-    text: 'Unsa ang presyo sa gas nga duol nako karon? Gamita ang LIVE_APP_DATA: una ang **top 5 nga pinakaduol**; kung dunay presyo, ipakita; kung wala, ipasabot nga community report pa. Ayaw pagbuhat og dagkong tabla nga tanan “—”.',
+    userMessage: 'Unsa ang presyo sa gas nga duol nako karon?',
   },
   {
     label: 'Unsaon pag-submit?',
-    text: 'Paghisguti formal: giunsa pag-submit og presyo sa Gas Bantay app, unsang fuel types (Diesel, Regular/Green, Premium/Red), ug ang voting.',
+    userMessage: 'Giunsa man pag-submit og presyo dinhi sa Gas Bantay?',
   },
   {
     label: 'Unsa ang Gas Bantay?',
-    text: 'Kinsa ang Gas Bantay / CDO Gas Price Map ug unsa ang katuyoan niini alang sa komunidad sa Cagayan de Oro?',
+    userMessage: 'Unsa ang Gas Bantay ug unsa may kapuslanan niini sa CDO?',
   },
 ];
+
+function LocPinIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M12 21s7-4.35 7-11a7 7 0 1 0-14 0c0 6.65 7 11 7 11z" />
+      <circle cx="12" cy="10" r="2.5" />
+    </svg>
+  );
+}
 
 function ChatMarkdown({ content }) {
   return (
@@ -185,9 +205,8 @@ export default function ChatAssistant({
           <div className="chat-assistant__body" ref={listRef}>
             {messages.length === 0 && (
               <p className="chat-assistant__empty">
-                Default language: <strong>Bisaya</strong>. You can also type in English or Filipino.
-                Ibutang ang <strong>Use my location</strong> sa dashboard aron mas tukma ang “duol
-                nako.”
+                Default: <strong>Bisaya</strong>; pwede pod English o Filipino. I-tap ang lokasyon sa
+                ubos aron makita ang <strong>top 3 nga pinakaduol</strong>.
               </p>
             )}
             {messages.map((m, i) => (
@@ -215,38 +234,39 @@ export default function ChatAssistant({
             </p>
           )}
 
-          <div className="chat-assistant__loc" role="region" aria-label="Location for nearest stations">
+          <div className="chat-assistant__loc" role="region" aria-label="Location">
             {userPosition ? (
-              <div className="chat-assistant__loc-on">
-                <span className="chat-assistant__loc-status" role="status">
-                  Lokasyon: <strong>gipadagan</strong> — ang assistant mogamit og top 5 nga pinakaduol
-                  (gilay-on: straight-line km).
+              <div className="chat-assistant__loc-row">
+                <LocPinIcon className="chat-assistant__loc-svg chat-assistant__loc-svg--on" />
+                <span className="chat-assistant__loc-label" role="status">
+                  {locationLoading ? 'Nagkuha…' : 'On'}
                 </span>
                 {typeof onRequestLocation === 'function' && (
                   <button
                     type="button"
-                    className="chat-assistant__loc-btn chat-assistant__loc-btn--ghost"
+                    className="chat-assistant__loc-refresh"
                     disabled={locationLoading || sending}
                     onClick={() => onRequestLocation()}
+                    title="I-refresh ang lokasyon"
+                    aria-label="I-refresh ang lokasyon"
                   >
-                    {locationLoading ? 'Nagkuha…' : 'I-refresh ang lokasyon'}
+                    ↻
                   </button>
                 )}
               </div>
             ) : (
-              <div className="chat-assistant__loc-off">
-                <button
-                  type="button"
-                  className="chat-assistant__loc-btn chat-assistant__loc-btn--primary"
-                  disabled={locationLoading || sending || typeof onRequestLocation !== 'function'}
-                  onClick={() => onRequestLocation?.()}
-                >
-                  {locationLoading ? 'Naghangyo sa lokasyon…' : 'I-on ang lokasyon (top 5 nga duol)'}
-                </button>
-                <p className="chat-assistant__loc-hint">
-                  Kinahanglan para mas tukma ang “presyo duol nako.” Ang browser mangutana og permission.
-                </p>
-              </div>
+              <button
+                type="button"
+                className="chat-assistant__loc-row chat-assistant__loc-row--btn"
+                disabled={locationLoading || sending || typeof onRequestLocation !== 'function'}
+                onClick={() => onRequestLocation?.()}
+                aria-label="I-on ang lokasyon para sa presyo nga duol"
+              >
+                <LocPinIcon className="chat-assistant__loc-svg" />
+                <span className="chat-assistant__loc-label">
+                  {locationLoading ? 'Nagkuha…' : 'Location'}
+                </span>
+              </button>
             )}
             {locationError && (
               <p className="chat-assistant__loc-err" role="alert">
@@ -256,13 +276,13 @@ export default function ChatAssistant({
           </div>
 
           <div className="chat-assistant__chips" role="group" aria-label="Suggested questions">
-            {PREDEFINED_QUESTIONS.map(({ label, text }) => (
+            {PREDEFINED_QUESTIONS.map(({ label, userMessage }) => (
               <button
                 key={label}
                 type="button"
                 className="chat-assistant__chip"
                 disabled={sending}
-                onClick={() => sendWithText(text)}
+                onClick={() => sendWithText(userMessage)}
               >
                 {label}
               </button>
