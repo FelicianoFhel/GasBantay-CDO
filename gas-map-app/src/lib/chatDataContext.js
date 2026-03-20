@@ -101,15 +101,22 @@ export async function fetchChatDataContext(supabase, stations, userPosition) {
   });
   const stationsWithPriceCount = rows.filter((r) => r.hasPrice).length;
 
-  const nearestWithDist = sortedForDistance.filter(
-    (r) => r.dist != null && Number.isFinite(r.dist)
-  );
-  const topNearest = nearestWithDist.slice(0, TOP_NEAREST);
-  const hasTopNearest = Boolean(userPosition && topNearest.length > 0);
-
-  const pricedElsewhere = hasTopNearest
-    ? []
-    : sortedForDistance.filter((r) => r.hasPrice).slice(0, MAX_PRICE_ROWS);
+  const pricedRows = sortedForDistance.filter((r) => r.hasPrice);
+  const cheapestRows = [...pricedRows]
+    .sort((a, b) => {
+      const minA = Math.min(
+        ...(Object.values(a.fuels)
+          .filter(Boolean)
+          .map((v) => Number(v)))
+      );
+      const minB = Math.min(
+        ...(Object.values(b.fuels)
+          .filter(Boolean)
+          .map((v) => Number(v)))
+      );
+      return minA - minB || (a.station.name || '').localeCompare(b.station.name || '');
+    })
+    .slice(0, TOP_NEAREST);
 
   const lines = [];
   lines.push('### Snapshot (read-only; authoritative for this chat turn)');
@@ -126,60 +133,24 @@ export async function fetchChatDataContext(supabase, stations, userPosition) {
   );
   lines.push('');
   lines.push(
-    '**Assistant rules (from app):** Do **not** copy this block verbatim. Do **not** say “LIVE_APP_DATA” or other technical names. For near-me with location on, answer from **Top 3 nearest** only. Prefer concise bullet lines (Station — km — Diesel/Regular/Premium) instead of markdown tables in final user response.'
+    '**Assistant rules (from app):** Do **not** copy this block verbatim. Do **not** say “LIVE_APP_DATA” or other technical names. Final response must use bullets only (no markdown tables). Prioritize top 3 cheapest stations from this data.'
   );
   lines.push('');
 
   const esc = (n) => String(n).replace(/\|/g, '/');
-
-  if (hasTopNearest) {
-    const anyPriceInTop = topNearest.some((r) => r.hasPrice);
-    lines.push(`### Top ${TOP_NEAREST} nearest stations (current search/list)`);
+  if (cheapestRows.length > 0) {
+    lines.push(`### Top ${TOP_NEAREST} cheapest stations (community reports)`);
     lines.push('');
-    if (anyPriceInTop) {
-      lines.push('| Station | km | Diesel | Regular | Premium |');
-      lines.push('| --- | ---: | ---: | ---: | ---: |');
-      for (const { station, dist, fuels } of topNearest) {
-        const label = esc(displayStationLabel(station, stations));
-        lines.push(
-          `| ${label} | ${dist.toFixed(1)} | ${fuels.diesel ? `₱${fuels.diesel}` : '—'} | ${fuels.regular_green ? `₱${fuels.regular_green}` : '—'} | ${fuels.premium_red ? `₱${fuels.premium_red}` : '—'} |`
-        );
-      }
-    } else {
-      lines.push(
-        `_Walay community presyo sa datos para sa top ${TOP_NEAREST} nga pinakaduol; gilay-on lang._`
-      );
-      lines.push('');
-      lines.push('| Station | km |');
-      lines.push('| --- | ---: |');
-      for (const { station, dist } of topNearest) {
-        lines.push(`| ${esc(displayStationLabel(station, stations))} | ${dist.toFixed(1)} |`);
-      }
-    }
-    lines.push('');
-    lines.push(
-      '_Disclaimer: community-submitted prices only; not official station or oil-company prices._'
-    );
-    lines.push('');
-  }
-
-  if (pricedElsewhere.length > 0) {
-    lines.push('### Stations with community-reported prices (trusted pick per fuel)');
-    lines.push('');
-    lines.push('| Station | km | Diesel | Regular | Premium |');
-    lines.push('| --- | ---: | ---: | ---: | ---: |');
-    for (const { station, dist, fuels } of pricedElsewhere) {
+    for (const { station, dist, fuels } of cheapestRows) {
       const label = esc(displayStationLabel(station, stations));
-      const km = dist != null && Number.isFinite(dist) ? dist.toFixed(1) : '—';
+      const km = dist != null && Number.isFinite(dist) ? `${dist.toFixed(1)} km` : 'km n/a';
       lines.push(
-        `| ${label} | ${km} | ${fuels.diesel ? `₱${fuels.diesel}` : '—'} | ${fuels.regular_green ? `₱${fuels.regular_green}` : '—'} | ${fuels.premium_red ? `₱${fuels.premium_red}` : '—'} |`
+        `- **${label}** (${km}) — Diesel: ${fuels.diesel ? `₱${fuels.diesel}` : 'walay report'}; Regular: ${fuels.regular_green ? `₱${fuels.regular_green}` : 'walay report'}; Premium: ${fuels.premium_red ? `₱${fuels.premium_red}` : 'walay report'}`
       );
     }
     lines.push('');
-    lines.push(
-      '_Disclaimer: community-submitted prices only; not official station or oil-company prices._'
-    );
-  } else if (!hasTopNearest && stationsWithPriceCount === 0) {
+    lines.push('_Disclaimer: community-submitted prices only; not official station or oil-company prices._');
+  } else if (stationsWithPriceCount === 0) {
     lines.push('### No community prices for stations in this view');
     lines.push('');
     lines.push(
