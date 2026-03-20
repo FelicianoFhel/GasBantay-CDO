@@ -46,6 +46,11 @@ function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function extractErrorHint(out) {
+  const msg = String(out?.data?.message || out?.data?.error || out?.text || '').trim();
+  return msg ? msg.slice(0, 220) : '';
+}
+
 async function getVoteCounts(reportIds) {
   if (!reportIds.length) return { up: {}, down: {} };
   const [upOut, downOut] = await Promise.all([
@@ -59,10 +64,12 @@ async function getVoteCounts(reportIds) {
     down[id] = 0;
   });
   if (!upOut.res.ok && !isMissingRelation(upOut)) {
-    throw new Error('Failed to load upvotes');
+    const hint = extractErrorHint(upOut);
+    throw new Error(hint ? `Failed to load upvotes: ${hint}` : 'Failed to load upvotes');
   }
   if (!downOut.res.ok && !isMissingRelation(downOut)) {
-    throw new Error('Failed to load downvotes');
+    const hint = extractErrorHint(downOut);
+    throw new Error(hint ? `Failed to load downvotes: ${hint}` : 'Failed to load downvotes');
   }
   asArray(upOut.data).forEach((r) => {
     up[r.report_id] = (up[r.report_id] || 0) + 1;
@@ -151,7 +158,16 @@ export default async function handler(req, res) {
         officialMap[`${o.station_id}:${o.fuel_type}`] = o;
       });
       const reportIds = reports.map((r) => r.id);
-      const counts = await getVoteCounts(reportIds);
+      let counts = { up: {}, down: {} };
+      try {
+        counts = await getVoteCounts(reportIds);
+      } catch {
+        // Keep reports usable even if vote tables are unavailable/misconfigured.
+        reportIds.forEach((id) => {
+          counts.up[id] = 0;
+          counts.down[id] = 0;
+        });
+      }
       const enriched = reports.map((r) => ({
         ...r,
         station_name: byStation[r.station_id]?.name || 'Station',
