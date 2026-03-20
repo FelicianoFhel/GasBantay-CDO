@@ -228,8 +228,10 @@ export default function AdminPage() {
   };
 
   const setVotes = async (report, direction) => {
-    const nextUp = Math.max(0, (report.upvotes || 0) + (direction === 'up' ? 1 : 0));
-    const nextDown = Math.max(0, (report.downvotes || 0) + (direction === 'down' ? 1 : 0));
+    const currentUp = report.upvotes || 0;
+    const currentDown = report.downvotes || 0;
+    const nextUp = direction === 'up' ? currentUp + 1 : Math.max(0, currentUp - 1);
+    const nextDown = direction === 'down' ? currentDown + 1 : Math.max(0, currentDown - 1);
     setReportsError('');
     try {
       const res = await fetch(`${apiBase()}/admin-reports`, {
@@ -244,9 +246,18 @@ export default function AdminPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Failed to update votes');
-      await loadReports();
+      setReports((prev) =>
+        prev.map((item) =>
+          item.id === report.id ? { ...item, upvotes: nextUp, downvotes: nextDown } : item
+        )
+      );
+      setVoteDrafts((prev) => ({
+        ...prev,
+        [report.id]: { upvotes: String(nextUp), downvotes: String(nextDown) },
+      }));
     } catch (e) {
       setReportsError(e.message || 'Failed to update votes');
+      await loadReports();
     }
   };
 
@@ -272,9 +283,18 @@ export default function AdminPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Failed to update votes');
-      await loadReports();
+      setReports((prev) =>
+        prev.map((item) =>
+          item.id === report.id ? { ...item, upvotes, downvotes } : item
+        )
+      );
+      setVoteDrafts((prev) => ({
+        ...prev,
+        [report.id]: { upvotes: String(upvotes), downvotes: String(downvotes) },
+      }));
     } catch (e) {
       setReportsError(e.message || 'Failed to update votes');
+      await loadReports();
     }
   };
 
