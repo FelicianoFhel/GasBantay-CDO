@@ -5,6 +5,14 @@ import { FUEL_TYPES, PRICE_MIN, PRICE_MAX } from '../constants';
 
 const BUCKET = 'report-photos';
 const MAX_FILE_MB = 5;
+const ALLOWED_PHOTO_MIME = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/heic',
+  'image/heif',
+]);
+const ALLOWED_PHOTO_EXT = new Set(['jpg', 'jpeg', 'png', 'heic', 'heif']);
 
 function toFriendlyErrorMessage(rawMessage) {
   if (!rawMessage || typeof rawMessage !== 'string') return 'Something went wrong. Please try again.';
@@ -74,6 +82,19 @@ function prefersNativeCameraPicker() {
   const coarse = window.matchMedia?.('(pointer: coarse)')?.matches;
   const touch = (navigator.maxTouchPoints ?? 0) > 0;
   return Boolean(coarse || touch);
+}
+
+function isAllowedPhotoFile(file) {
+  if (!file) return false;
+  const ext = String(file.name || '')
+    .split('.')
+    .pop()
+    ?.toLowerCase();
+  const mime = String(file.type || '').toLowerCase();
+  const hasAllowedExt = Boolean(ext && ALLOWED_PHOTO_EXT.has(ext));
+  const hasAllowedMime = Boolean(mime && ALLOWED_PHOTO_MIME.has(mime));
+  // Accept when either MIME or extension matches allowed image types.
+  return hasAllowedExt || hasAllowedMime;
 }
 
 export default function SubmitPriceForm({ stationId, stationName, onSubmitted }) {
@@ -192,7 +213,17 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
   };
 
   const onFileChosen = (e) => {
-    setPhotoFile(e.target.files?.[0] || null);
+    const selected = e.target.files?.[0] || null;
+    if (selected && !isAllowedPhotoFile(selected)) {
+      setPhotoFile(null);
+      setMessage('Only PNG, JPEG/JPG, HEIC, and HEIF photos are allowed.');
+      setMessageType('error');
+      e.target.value = '';
+      return;
+    }
+    setMessage(null);
+    setMessageType('');
+    setPhotoFile(selected);
     e.target.value = '';
   };
 
@@ -251,6 +282,11 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
     }
     if (photoFile && photoFile.size > MAX_FILE_MB * 1024 * 1024) {
       setMessage(`Photo must be under ${MAX_FILE_MB} MB.`);
+      setMessageType('error');
+      return;
+    }
+    if (photoFile && !isAllowedPhotoFile(photoFile)) {
+      setMessage('Only PNG, JPEG/JPG, HEIC, and HEIF photos are allowed.');
       setMessageType('error');
       return;
     }
@@ -332,7 +368,7 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
             id="report-photo"
             type="file"
             className="form-input form-input--hidden"
-            accept="image/jpeg,image/png,image/webp,image/heic,.heic"
+            accept="image/jpeg,image/jpg,image/png,image/heic,image/heif,.jpg,.jpeg,.png,.heic,.heif"
             onChange={onFileChosen}
           />
           <input
@@ -340,7 +376,7 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
             id="report-photo-camera"
             type="file"
             className="form-input form-input--hidden"
-            accept="image/*"
+            accept="image/jpeg,image/jpg,image/png,image/heic,image/heif,.jpg,.jpeg,.png,.heic,.heif"
             capture="environment"
             onChange={onFileChosen}
           />
