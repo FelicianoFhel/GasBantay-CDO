@@ -181,6 +181,9 @@ export default function ChatAssistant({
               <h2 id="chat-assistant-title" className="chat-assistant__title">
                 Map assistant
               </h2>
+              <p className="chat-assistant__sub">
+               
+              </p>
               {backendConfigured === false && (
                 <p className="chat-assistant__warn" role="status">
                   Add <code>GROQ_API_KEY</code> or <code>VITE_GROQ_API_KEY</code> in Vercel env and

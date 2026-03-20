@@ -159,7 +159,7 @@ export default function App() {
             </nav>
             <p className="app-footer__credit">
               <strong className="app-footer__brand">CDO Gas Price Map</strong> — community fuel prices
-              for Cagayan de Oro. Prices are user-submitted; please verify at the station. Built by{' '}
+              for Cagayan de Oro. Prices are user-submitted; please verify at the station. 
               <a
                 href="https://fhel-dev.vercel.app/"
                 target="_blank"
