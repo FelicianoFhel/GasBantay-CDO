@@ -115,11 +115,13 @@ export default async function handler(req, res) {
         : Promise.resolve({ data: [] }),
     ]);
     const byStation = {};
-    (stationsOut.data || []).forEach((s) => {
+    const stationsList = Array.isArray(stationsOut.data) ? stationsOut.data : [];
+    stationsList.forEach((s) => {
       byStation[s.id] = s;
     });
     const officialMap = {};
-    (officialOut.data || []).forEach((o) => {
+    const officialList = Array.isArray(officialOut.data) ? officialOut.data : [];
+    officialList.forEach((o) => {
       officialMap[`${o.station_id}:${o.fuel_type}`] = o;
     });
     const reportIds = reports.map((r) => r.id);
