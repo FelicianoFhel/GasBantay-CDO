@@ -99,6 +99,47 @@ function groqApiErrorMessage(text, data) {
   return '';
 }
 
+function removeInternalDataEcho(text) {
+  const lines = String(text || '').split('\n');
+  const cleaned = [];
+  let skipTable = false;
+  let skippedAny = false;
+
+  for (const line of lines) {
+    const t = line.trim();
+    const lower = t.toLowerCase();
+    const isInternalHeader =
+      lower.startsWith('map data') ||
+      lower.startsWith('## map data') ||
+      lower.startsWith('### snapshot') ||
+      lower.includes('authoritative for this chat turn');
+
+    if (isInternalHeader) {
+      skipTable = true;
+      skippedAny = true;
+      continue;
+    }
+
+    if (skipTable) {
+      const isMarkdownTableLine = t.startsWith('|') || /^[:\-\s|]+$/.test(t);
+      if (isMarkdownTableLine || t === '') {
+        skippedAny = true;
+        continue;
+      }
+      skipTable = false;
+    }
+
+    cleaned.push(line);
+  }
+
+  const out = cleaned.join('\n').trim();
+  if (out) return out;
+  if (skippedAny) {
+    return 'Base sa kasamtangang datos sa app, mao ni ang pinaka-importante nga tubag: walay i-display nga internal map-data block sa user view.';
+  }
+  return out;
+}
+
 async function groqPost(apiKey, payload) {
   const res = await fetch(GROQ_URL, {
     method: 'POST',
@@ -214,7 +255,8 @@ export default async function handler(req, res) {
       });
     }
 
-    const reply = chatOut.data?.choices?.[0]?.message?.content?.trim() || '';
+    const replyRaw = chatOut.data?.choices?.[0]?.message?.content?.trim() || '';
+    const reply = removeInternalDataEcho(replyRaw);
     if (!reply) {
       return res.status(502).json({ error: 'Empty reply from assistant.' });
     }
