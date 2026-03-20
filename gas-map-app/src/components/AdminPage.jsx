@@ -356,6 +356,33 @@ export default function AdminPage() {
     }
   };
 
+  const clearReportPhoto = async (report) => {
+    if (!report?.id || !report.photo_url) return;
+    const ok = confirm('Remove only the uploaded photo from this report?');
+    if (!ok) return;
+    setReportsError('');
+    try {
+      const res = await fetch(`${apiBase()}/admin-reports`, {
+        method: 'PATCH',
+        headers: authHeaders,
+        body: JSON.stringify({
+          action: 'clear_photo',
+          report_id: report.id,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to remove photo');
+      setReports((prev) =>
+        prev.map((item) => (item.id === report.id ? { ...item, photo_url: null } : item))
+      );
+      setSelectedReport((prev) =>
+        prev?.id === report.id ? { ...prev, photo_url: null } : prev
+      );
+    } catch (e) {
+      setReportsError(e.message || 'Failed to remove photo');
+    }
+  };
+
   if (!isLoggedIn) {
     return (
       <main className="admin-page">
@@ -664,6 +691,15 @@ export default function AdminPage() {
               <p className="report-detail-modal__meta">No uploaded photo.</p>
             )}
             <div className="admin-report-detail__actions">
+              {selectedReport.photo_url && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => clearReportPhoto(selectedReport)}
+                >
+                  Remove photo only
+                </button>
+              )}
               <button type="button" className="btn-secondary" onClick={() => deleteReport(selectedReport)}>
                 Delete report
               </button>
