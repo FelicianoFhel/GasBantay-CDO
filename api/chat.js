@@ -18,6 +18,10 @@ const SYSTEM_BASE = `You are the professional assistant for **CDO Gas Price Map*
 - Use **GitHub-flavored Markdown**: short **bold** labels, bullet/numbered lists, and blank lines between sections.
 - Keep a calm, formal tone; use clear headings like \`###\` for sections when the answer is long.
 - Do not use raw HTML.
+- Start with a **direct answer first** in 1-2 sentences (no long intro, no repetition).
+- Be **specific and concrete**: include exact station names, fuel, price, and km when available.
+- If asked a simple question, answer it plainly first, then add only brief supporting detail.
+- Avoid vague advice like "it depends" unless truly necessary; if uncertain, state exactly what is missing.
 
 ## Data rules
 - A **map data** section may appear below with station names and **₱ prices**. Treat those as the **only** authoritative numbers. Do not invent or change figures.
@@ -75,7 +79,7 @@ function chatPayload(messagesForModel, contextRaw) {
   return {
     model: CHAT_MODEL,
     messages: [{ role: 'system', content: buildSystemWithContext(contextRaw) }, ...messagesForModel],
-    temperature: 0.45,
+    temperature: 0.3,
     max_completion_tokens: 1024,
     top_p: 1,
     stream: false,
