@@ -140,10 +140,37 @@ export default function App() {
           </div>
         </section>
         <footer className="app-footer" role="contentinfo">
-          <button type="button" className="app-footer__link" onClick={() => setPrivacyOpen(true)}>
-            Privacy policy
-          </button>
-          <span className="app-footer__note">Community-submitted prices · verify at the station</span>
+          <div className="app-footer__inner">
+            <nav className="app-footer__nav" aria-label="Footer links">
+              <button type="button" className="app-footer__link" onClick={() => setPrivacyOpen(true)}>
+                Privacy policy
+              </button>
+              <span className="app-footer__sep" aria-hidden>
+                ·
+              </span>
+              <a
+                className="app-footer__out"
+                href="https://fhel-dev.vercel.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Developer profile
+              </a>
+            </nav>
+            <p className="app-footer__credit">
+              <strong className="app-footer__brand">CDO Gas Price Map</strong> — community fuel prices
+              for Cagayan de Oro. Prices are user-submitted; please verify at the station. Built by{' '}
+              <a
+                href="https://fhel-dev.vercel.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="app-footer__out app-footer__out--inline"
+              >
+                Fhel
+              </a>
+              .
+            </p>
+          </div>
         </footer>
       </main>
       <PrivacyModal open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
