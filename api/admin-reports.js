@@ -63,6 +63,13 @@ async function getVoteCounts(reportIds) {
   return { up, down };
 }
 
+function isMissingRelation(out) {
+  const msg = String(
+    out?.data?.message || out?.data?.error || out?.text || ''
+  ).toLowerCase();
+  return msg.includes('does not exist') || msg.includes('undefined table');
+}
+
 async function setVotesAbsolute(reportId, wantUp, wantDown) {
   await sbFetch(`upvotes?report_id=eq.${encodeURIComponent(reportId)}`, {
     method: 'DELETE',
@@ -106,7 +113,7 @@ export default async function handler(req, res) {
     if (!out.res.ok) return res.status(502).json({ error: 'Failed to load reports' });
     const reports = out.data || [];
     const stationIds = [...new Set(reports.map((r) => r.station_id))];
-    const [stationsOut, officialOut] = await Promise.all([
+    const [stationsOut, officialOutRaw] = await Promise.all([
       stationIds.length
         ? sbFetch(`gas_stations?select=id,name,address&id=in.(${stationIds.join(',')})`)
         : Promise.resolve({ data: [] }),
@@ -114,14 +121,16 @@ export default async function handler(req, res) {
         ? sbFetch(`official_station_prices?select=station_id,fuel_type,price,source_report_id&station_id=in.(${stationIds.join(',')})`)
         : Promise.resolve({ data: [] }),
     ]);
+    const officialOut =
+      officialOutRaw?.res?.ok || isMissingRelation(officialOutRaw)
+        ? officialOutRaw
+        : { data: [] };
     const byStation = {};
-    const stationsList = Array.isArray(stationsOut.data) ? stationsOut.data : [];
-    stationsList.forEach((s) => {
+    (stationsOut.data || []).forEach((s) => {
       byStation[s.id] = s;
     });
     const officialMap = {};
-    const officialList = Array.isArray(officialOut.data) ? officialOut.data : [];
-    officialList.forEach((o) => {
+    (officialOut.data || []).forEach((o) => {
       officialMap[`${o.station_id}:${o.fuel_type}`] = o;
     });
     const reportIds = reports.map((r) => r.id);
@@ -161,6 +170,13 @@ export default async function handler(req, res) {
     if (action === 'set_official') {
       const reportId = String(body?.report_id || '').trim();
       if (!reportId) return res.status(400).json({ error: 'report_id required' });
+      const officialCheck = await sbFetch('official_station_prices?select=id&limit=1');
+      if (!officialCheck.res.ok && isMissingRelation(officialCheck)) {
+        return res.status(400).json({
+          error:
+            'official_station_prices table is missing. Run migration add_official_station_prices.sql first.',
+        });
+      }
       const reportOut = await sbFetch(
         `price_reports?select=id,station_id,fuel_type,price&id=eq.${encodeURIComponent(reportId)}&limit=1`
       );
