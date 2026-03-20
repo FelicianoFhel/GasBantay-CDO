@@ -56,7 +56,8 @@ export default function ChatAssistant() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || `Request failed (${res.status})`);
+        const parts = [data.error, data.hint].filter(Boolean);
+        throw new Error(parts.length ? parts.join(' — ') : `Request failed (${res.status})`);
       }
       if (!data.reply) throw new Error('No reply from assistant');
       setMessages((m) => [...m, { role: 'assistant', content: data.reply }]);

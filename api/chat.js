@@ -5,7 +5,8 @@
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 const GUARD_MODEL = 'meta-llama/llama-prompt-guard-2-22m';
-const CHAT_MODEL = 'meta-llama/llama-3.1-8b-instant';
+/** Production ID on Groq (no meta-llama/ prefix) — wrong id returns 400 and breaks chat. */
+const CHAT_MODEL = 'llama-3.1-8b-instant';
 
 const SYSTEM = `You are the assistant for "CDO Gas Price Map" (Gas Bantay) — a community crowdsourced fuel price app for Cagayan de Oro, Philippines.
 
@@ -55,6 +56,18 @@ function chatPayload(messagesForModel) {
     stream: false,
     stop: null,
   };
+}
+
+function groqApiErrorMessage(text, data) {
+  const msg = data?.error?.message || data?.message;
+  if (msg && typeof msg === 'string') return msg.slice(0, 220);
+  try {
+    const j = JSON.parse(text || '{}');
+    if (j?.error?.message) return String(j.error.message).slice(0, 220);
+  } catch {
+    /* ignore */
+  }
+  return '';
 }
 
 async function groqPost(apiKey, payload) {
@@ -145,8 +158,12 @@ export default async function handler(req, res) {
     const guardBody = promptGuardPayload(latestUser.content);
     const guardOut = await groqPost(apiKey, guardBody);
     if (!guardOut.res.ok) {
+      const hint = groqApiErrorMessage(guardOut.text, guardOut.data);
       console.error('[api/chat] prompt-guard', guardOut.res.status, guardOut.text.slice(0, 400));
-      return res.status(502).json({ error: 'Safety check temporarily unavailable.' });
+      return res.status(502).json({
+        error: 'Safety check temporarily unavailable.',
+        ...(hint && { hint }),
+      });
     }
     const guardText = guardOut.data?.choices?.[0]?.message?.content ?? '';
     if (isPromptGuardUnsafe(guardText)) {
@@ -157,8 +174,12 @@ export default async function handler(req, res) {
 
     const chatOut = await groqPost(apiKey, chatPayload(messages));
     if (!chatOut.res.ok) {
+      const hint = groqApiErrorMessage(chatOut.text, chatOut.data);
       console.error('[api/chat] Groq chat', chatOut.res.status, chatOut.text.slice(0, 500));
-      return res.status(502).json({ error: 'Assistant temporarily unavailable.' });
+      return res.status(502).json({
+        error: 'Assistant temporarily unavailable.',
+        ...(hint && { hint }),
+      });
     }
 
     const reply = chatOut.data?.choices?.[0]?.message?.content?.trim() || '';
