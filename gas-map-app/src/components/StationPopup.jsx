@@ -109,57 +109,115 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
   const updatedAt = topReport?.reported_at || topReport?.created_at;
 
   const handleLike = async (reportId) => {
-    if (myLikes.has(reportId)) return;
+    if (myLikes.has(reportId)) {
+      const { error } = await supabase
+        .from('upvotes')
+        .delete()
+        .eq('report_id', reportId)
+        .eq('fingerprint', voterId);
+      if (error) {
+        await fetchReports();
+        return;
+      }
+      setMyLikes((s) => {
+        const next = new Set(s);
+        next.delete(reportId);
+        return next;
+      });
+      setLikeCounts((c) => ({
+        ...c,
+        [reportId]: Math.max(0, (c[reportId] || 0) - 1),
+      }));
+      return;
+    }
 
     if (myDislikes.has(reportId)) {
-      await supabase
+      const { error: delDownErr } = await supabase
         .from('downvotes')
         .delete()
         .eq('report_id', reportId)
         .eq('fingerprint', voterId);
+      if (delDownErr) {
+        await fetchReports();
+        return;
+      }
       setMyDislikes((s) => {
         const next = new Set(s);
         next.delete(reportId);
         return next;
       });
-      setDislikeCounts((c) => ({ ...c, [reportId]: Math.max(0, (c[reportId] || 0) - 1) }));
+      setDislikeCounts((c) => ({
+        ...c,
+        [reportId]: Math.max(0, (c[reportId] || 0) - 1),
+      }));
     }
 
     const { error } = await supabase.from('upvotes').insert({
       report_id: reportId,
       fingerprint: voterId,
     });
-    if (!error) {
-      setMyLikes((s) => new Set([...s, reportId]));
-      setLikeCounts((c) => ({ ...c, [reportId]: (c[reportId] || 0) + 1 }));
+    if (error) {
+      await fetchReports();
+      return;
     }
+    setMyLikes((s) => new Set(s).add(reportId));
+    setLikeCounts((c) => ({ ...c, [reportId]: (c[reportId] || 0) + 1 }));
   };
 
   const handleDislike = async (reportId) => {
-    if (myDislikes.has(reportId)) return;
+    if (myDislikes.has(reportId)) {
+      const { error } = await supabase
+        .from('downvotes')
+        .delete()
+        .eq('report_id', reportId)
+        .eq('fingerprint', voterId);
+      if (error) {
+        await fetchReports();
+        return;
+      }
+      setMyDislikes((s) => {
+        const next = new Set(s);
+        next.delete(reportId);
+        return next;
+      });
+      setDislikeCounts((c) => ({
+        ...c,
+        [reportId]: Math.max(0, (c[reportId] || 0) - 1),
+      }));
+      return;
+    }
 
     if (myLikes.has(reportId)) {
-      await supabase
+      const { error: delUpErr } = await supabase
         .from('upvotes')
         .delete()
         .eq('report_id', reportId)
         .eq('fingerprint', voterId);
+      if (delUpErr) {
+        await fetchReports();
+        return;
+      }
       setMyLikes((s) => {
         const next = new Set(s);
         next.delete(reportId);
         return next;
       });
-      setLikeCounts((c) => ({ ...c, [reportId]: Math.max(0, (c[reportId] || 0) - 1) }));
+      setLikeCounts((c) => ({
+        ...c,
+        [reportId]: Math.max(0, (c[reportId] || 0) - 1),
+      }));
     }
 
     const { error } = await supabase.from('downvotes').insert({
       report_id: reportId,
       fingerprint: voterId,
     });
-    if (!error) {
-      setMyDislikes((s) => new Set([...s, reportId]));
-      setDislikeCounts((c) => ({ ...c, [reportId]: (c[reportId] || 0) + 1 }));
+    if (error) {
+      await fetchReports();
+      return;
     }
+    setMyDislikes((s) => new Set(s).add(reportId));
+    setDislikeCounts((c) => ({ ...c, [reportId]: (c[reportId] || 0) + 1 }));
   };
 
   return (
@@ -246,7 +304,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
                         type="button"
                         className={`vote-btn vote-btn--like ${myLikes.has(r.id) ? 'is-active' : ''}`}
                         onClick={() => handleLike(r.id)}
-                        title={myLikes.has(r.id) ? 'Liked' : 'Like'}
+                        title={myLikes.has(r.id) ? 'Remove like' : 'Like'}
                       >
                         👍 {likeCounts[r.id] || 0}
                       </button>
@@ -254,7 +312,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
                         type="button"
                         className={`vote-btn vote-btn--dislike ${myDislikes.has(r.id) ? 'is-active' : ''}`}
                         onClick={() => handleDislike(r.id)}
-                        title={myDislikes.has(r.id) ? 'Disliked' : 'Dislike'}
+                        title={myDislikes.has(r.id) ? 'Remove dislike' : 'Dislike'}
                       >
                         👎 {dislikeCounts[r.id] || 0}
                       </button>

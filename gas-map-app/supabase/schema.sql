@@ -70,6 +70,12 @@ create policy "Anyone can read downvotes"
 create policy "Anyone can insert downvotes"
   on public.downvotes for insert with check (true);
 
+create policy "Anyone can delete upvotes"
+  on public.upvotes for delete using (true);
+
+create policy "Anyone can delete downvotes"
+  on public.downvotes for delete using (true);
+
 -- 3. Seed CDO gas stations (Cagayan de Oro area)
 insert into public.gas_stations (name, lat, lng, address) values
   ('Petron Carmen', 8.4789, 124.6432, 'Carmen, Cagayan de Oro'),
