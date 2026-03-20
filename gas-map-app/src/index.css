@@ -2353,6 +2353,126 @@ html, body, #root {
   margin-bottom: 0;
 }
 
+/* ===== Admin ===== */
+.admin-page {
+  min-height: 100vh;
+  background: #f3f6fb;
+  padding: var(--space-6) var(--space-4);
+}
+
+.admin-login-card,
+.admin-shell {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.admin-login-card {
+  max-width: 420px;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-5);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+.admin-login-card h1,
+.admin-head h1,
+.admin-panel h2 {
+  margin: 0 0 var(--space-2);
+}
+
+.admin-login-card p {
+  margin: 0 0 var(--space-4);
+  color: var(--color-text-muted);
+}
+
+.admin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.admin-head__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.admin-panel {
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.admin-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.admin-form--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-3);
+}
+
+.admin-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.admin-form input {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-family: inherit;
+}
+
+.admin-form__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  grid-column: 1 / -1;
+}
+
+.admin-error {
+  margin: var(--space-2) 0 0;
+  color: var(--color-error);
+  font-size: var(--text-sm);
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-table th,
+.admin-table td {
+  border-bottom: 1px solid var(--color-border-light);
+  text-align: left;
+  padding: 10px 8px;
+  font-size: var(--text-sm);
+}
+
+.admin-table th {
+  color: var(--color-text-secondary);
+}
+
+.admin-table__actions {
+  display: flex;
+  gap: 6px;
+}
+
 @media (max-width: 767px) {
   .app-header__badge {
     display: none;
