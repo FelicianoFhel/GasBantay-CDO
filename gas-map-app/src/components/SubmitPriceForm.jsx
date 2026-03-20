@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { extractPriceFromImage, isGroqConfigured } from '../lib/groq';
+import { moderatePhotoUpload } from '../lib/chatApi';
 import { FUEL_TYPES, PRICE_MIN, PRICE_MAX } from '../constants';
 
 const BUCKET = 'report-photos';
@@ -297,6 +298,26 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
 
     let photoUrl = null;
     if (photoFile) {
+      try {
+        const verdict = await moderatePhotoUpload(photoFile);
+        if (!verdict.allow) {
+          setSubmitting(false);
+          setMessage(
+            verdict.reason ||
+              'Photo rejected. Only gas station price-related images are allowed (no sexual, political, or unrelated content).'
+          );
+          setMessageType('error');
+          return;
+        }
+      } catch (e) {
+        setSubmitting(false);
+        setMessage(
+          'Photo verification is unavailable right now. Please try again or submit without photo.'
+        );
+        setMessageType('error');
+        return;
+      }
+
       const ext = photoFile.name.split('.').pop()?.toLowerCase() || 'jpg';
       const path = `${stationId}/${createUploadId()}.${ext}`;
       const { error: uploadError } = await supabase.storage
