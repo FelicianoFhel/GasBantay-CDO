@@ -2045,13 +2045,41 @@ html, body, #root {
   background: var(--color-surface);
 }
 
+.map-compact-list__nearby-note {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 0.72rem;
+  color: var(--color-primary);
+  background: rgba(37, 99, 235, 0.06);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.map-compact-list__nearby-btn {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--color-border-light);
+  background: rgba(37, 99, 235, 0.06);
+  color: var(--color-primary);
+  font-size: 0.75rem;
+  font-weight: var(--font-semibold);
+  text-align: left;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.map-compact-list__nearby-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .map-compact-list__item {
   width: 100%;
   display: grid;
   grid-template-columns: 1fr auto;
   grid-template-areas:
     "name price"
-    "meta fuel";
+    "meta fuel"
+    "distance fuel";
   gap: 2px 8px;
   text-align: left;
   padding: 10px 12px;
@@ -2076,6 +2104,10 @@ html, body, #root {
   grid-area: meta;
   font-size: 0.72rem;
   color: var(--color-text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .map-compact-list__fuel {
@@ -2090,6 +2122,12 @@ html, body, #root {
   justify-self: end;
   font-size: var(--text-base);
   color: var(--color-primary);
+}
+
+.map-compact-list__distance {
+  grid-area: distance;
+  font-size: 0.7rem;
+  color: var(--color-text-secondary);
 }
 
 /* ===== Site footer (legal / trust) ===== */

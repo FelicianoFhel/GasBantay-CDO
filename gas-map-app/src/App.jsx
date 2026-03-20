@@ -93,9 +93,17 @@ export default function App() {
     });
     return list
       .sort((a, b) => {
+        if (userPosition) {
+          const aDist = Number.isFinite(a.distance) ? a.distance : Number.POSITIVE_INFINITY;
+          const bDist = Number.isFinite(b.distance) ? b.distance : Number.POSITIVE_INFINITY;
+          if (aDist !== bDist) return aDist - bDist;
+        }
         const aHas = Number.isFinite(a.badgePrice);
         const bHas = Number.isFinite(b.badgePrice);
         if (aHas !== bHas) return bHas ? 1 : -1;
+        if (aHas && bHas && a.badgePrice !== b.badgePrice) {
+          return a.badgePrice - b.badgePrice;
+        }
         if (userPosition && a.distance != null && b.distance != null) {
           return a.distance - b.distance;
         }
@@ -267,6 +275,18 @@ export default function App() {
             </div>
           ) : (
             <div className="map-compact-list" role="tabpanel" aria-label="Station list view">
+              {userPosition ? (
+                <p className="map-compact-list__nearby-note">Sorted by nearest stations to your location</p>
+              ) : (
+                <button
+                  type="button"
+                  className="map-compact-list__nearby-btn"
+                  onClick={requestLocation}
+                  disabled={locationLoading}
+                >
+                  {locationLoading ? 'Getting location…' : 'Use my location for Near Me'}
+                </button>
+              )}
               {compactListStations.map((s) => (
                 <button
                   key={`${s.id}-compact`}
@@ -275,9 +295,7 @@ export default function App() {
                   onClick={() => handleSelectStation(s)}
                 >
                   <span className="map-compact-list__name">{s.name}</span>
-                  <span className="map-compact-list__meta">
-                    {s.distance != null ? `${s.distance.toFixed(1)} km` : 'CDO'}
-                  </span>
+                  <span className="map-compact-list__meta">{s.address || 'Address unavailable'}</span>
                   <span className="map-compact-list__fuel">
                     {s.badgeFuelType?.includes('diesel')
                       ? 'Diesel'
@@ -290,6 +308,9 @@ export default function App() {
                   <strong className="map-compact-list__price">
                     {Number.isFinite(s.badgePrice) ? `₱${s.badgePrice.toFixed(2)}` : '—'}
                   </strong>
+                  <span className="map-compact-list__distance">
+                    {s.distance != null ? `${s.distance.toFixed(1)} km` : 'Near me unavailable'}
+                  </span>
                 </button>
               ))}
             </div>
