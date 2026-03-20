@@ -3,6 +3,7 @@ import Map from './components/Map';
 import StationPopup from './components/StationPopup';
 import Dashboard from './components/Dashboard';
 import SearchBar from './components/SearchBar';
+import ChatAssistant from './components/ChatAssistant';
 import { isSupabaseConfigured } from './lib/supabaseClient';
 import { supabase } from './lib/supabaseClient';
 
@@ -122,6 +123,7 @@ export default function App() {
           onReportSubmitted={handleReportSubmitted}
         />
       )}
+      <ChatAssistant />
     </>
   );
 }

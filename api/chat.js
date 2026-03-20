@@ -1,0 +1,157 @@
+/**
+ * Vercel Serverless — Groq chat (GROQ_API_KEY). Prompt Guard 2 pre-check, then Llama 3.1 chat.
+ */
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+const GUARD_MODEL = 'meta-llama/llama-prompt-guard-2-22m';
+const CHAT_MODEL = 'meta-llama/llama-3.1-8b-instant';
+
+const SYSTEM = `You are the assistant for "CDO Gas Price Map" (Gas Bantay) — a community crowdsourced fuel price app for Cagayan de Oro, Philippines.
+
+Help users with:
+- How to read the map, submit prices, vote on reports, and fuel types (Diesel, Regular/Green, Premium/Red).
+- General guidance in English or Filipino (Tagalog); keep answers short and practical.
+
+Do not invent live prices. If asked for exact station prices, say prices come from user reports on the map and they should check the app.
+Do not claim government or oil-company authority.`;
+
+const MAX_MESSAGES = 16;
+const MAX_CONTENT = 3500;
+
+/** Same shape as Groq curl for Prompt Guard (max_completion_tokens: 1 per your snippet). */
+function promptGuardPayload(userContent) {
+  return {
+    messages: [{ role: 'user', content: userContent }],
+    model: GUARD_MODEL,
+    temperature: 1,
+    max_completion_tokens: 1,
+    top_p: 1,
+    stream: false,
+    stop: null,
+  };
+}
+
+function chatPayload(messagesForModel) {
+  return {
+    model: CHAT_MODEL,
+    messages: [{ role: 'system', content: SYSTEM }, ...messagesForModel],
+    temperature: 0.5,
+    max_completion_tokens: 600,
+    top_p: 1,
+    stream: false,
+    stop: null,
+  };
+}
+
+async function groqPost(apiKey, payload) {
+  const res = await fetch(GROQ_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    /* ignore */
+  }
+  return { res, text, data };
+}
+
+/** Interpret Llama Prompt Guard 2 completion (often BENIGN / MALICIOUS; your curl uses max_completion_tokens: 1). */
+function isPromptGuardUnsafe(content) {
+  const raw = (content || '').trim();
+  if (!raw) return false;
+  const t = raw.toUpperCase();
+  if (t === '1' || /\bMALICIOUS\b/.test(t) || /^MAL$/.test(t) || t === 'M') return true;
+  if (/\bUNSAFE\b|\bINJECTION\b/.test(t)) return true;
+  if (/\bBENIGN\b/.test(t) || /^BEN$/.test(t) || t === 'B' || t === '0' || /\bSAFE\b/.test(t)) return false;
+  return false;
+}
+
+export default async function handler(req, res) {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+
+  if (req.method === 'GET') {
+    const key = process.env.GROQ_API_KEY;
+    const enabled = Boolean(key && String(key).length > 12 && !String(key).includes('your-'));
+    return res.status(200).json({ enabled });
+  }
+
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'GET, POST');
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey || String(apiKey).includes('your-groq')) {
+    return res.status(503).json({ error: 'Assistant is not configured (set GROQ_API_KEY on Vercel).' });
+  }
+
+  let body = req.body;
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body || '{}');
+    } catch {
+      return res.status(400).json({ error: 'Invalid JSON body' });
+    }
+  }
+
+  const rawMessages = body?.messages;
+  if (!Array.isArray(rawMessages) || rawMessages.length === 0) {
+    return res.status(400).json({ error: 'messages[] required' });
+  }
+
+  const slice = rawMessages.slice(-MAX_MESSAGES);
+  const messages = [];
+  for (const m of slice) {
+    const role = m?.role === 'assistant' ? 'assistant' : 'user';
+    const content = String(m?.content ?? '').slice(0, MAX_CONTENT).trim();
+    if (!content) continue;
+    messages.push({ role, content });
+  }
+
+  if (messages.length === 0) {
+    return res.status(400).json({ error: 'No valid messages' });
+  }
+
+  const latestUser = [...messages].reverse().find((m) => m.role === 'user');
+  if (!latestUser?.content) {
+    return res.status(400).json({ error: 'No user message to check' });
+  }
+
+  try {
+    const guardBody = promptGuardPayload(latestUser.content);
+    const guardOut = await groqPost(apiKey, guardBody);
+    if (!guardOut.res.ok) {
+      console.error('[api/chat] prompt-guard', guardOut.res.status, guardOut.text.slice(0, 400));
+      return res.status(502).json({ error: 'Safety check temporarily unavailable.' });
+    }
+    const guardText = guardOut.data?.choices?.[0]?.message?.content ?? '';
+    if (isPromptGuardUnsafe(guardText)) {
+      return res.status(400).json({
+        error: 'That message could not be sent. Please ask about the gas map or fuel prices in a straightforward way.',
+      });
+    }
+
+    const chatOut = await groqPost(apiKey, chatPayload(messages));
+    if (!chatOut.res.ok) {
+      console.error('[api/chat] Groq chat', chatOut.res.status, chatOut.text.slice(0, 500));
+      return res.status(502).json({ error: 'Assistant temporarily unavailable.' });
+    }
+
+    const reply = chatOut.data?.choices?.[0]?.message?.content?.trim() || '';
+    if (!reply) {
+      return res.status(502).json({ error: 'Empty reply from assistant.' });
+    }
+
+    return res.status(200).json({ reply });
+  } catch (e) {
+    console.error('[api/chat]', e);
+    return res.status(502).json({ error: 'Assistant request failed.' });
+  }
+}

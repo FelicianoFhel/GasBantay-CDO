@@ -45,7 +45,9 @@ Open http://localhost:5173
 4. Add **Environment Variables**:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
-5. Deploy. The app is a SPA; `vercel.json` rewrites all routes to `index.html`.
+5. Deploy from the **repository root** (where the root `vercel.json` and `api/` folder live), not only this subfolder, so `/api/chat` is included.
+6. **Groq chat assistant:** add **`GROQ_API_KEY`** in Vercel → Project → Settings → Environment Variables (server-side; do not prefix with `VITE_`). The floating **Assistant** button calls `/api/chat`. Photo AI still uses **`VITE_GROQ_API_KEY`** in the frontend if you use that feature.
+7. **Local dev:** `npm run dev` does not serve `/api`. Either run `npx vercel dev` from the repo root, or set **`VITE_CHAT_API_URL`** in `.env` to your deployed API base, e.g. `https://your-project.vercel.app/api`.
 
 ## Features (MVP)
 

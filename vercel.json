@@ -3,5 +3,10 @@
   "buildCommand": "cd gas-map-app && npm run build",
   "outputDirectory": "gas-map-app/dist",
   "framework": null,
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ]
 }
