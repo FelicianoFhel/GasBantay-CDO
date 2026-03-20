@@ -169,6 +169,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
         [reportId]: Math.max(0, (c[reportId] || 0) - 1),
       }));
       startVoteCooldown(fuelType);
+      await fetchReports();
       return;
     }
 
@@ -204,6 +205,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
     setMyLikes((s) => new Set(s).add(reportId));
     setLikeCounts((c) => ({ ...c, [reportId]: (c[reportId] || 0) + 1 }));
     startVoteCooldown(fuelType);
+    await fetchReports();
   };
 
   const handleDislike = async (reportId, fuelType) => {
@@ -227,6 +229,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
         [reportId]: Math.max(0, (c[reportId] || 0) - 1),
       }));
       startVoteCooldown(fuelType);
+      await fetchReports();
       return;
     }
 
@@ -262,6 +265,7 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
     setMyDislikes((s) => new Set(s).add(reportId));
     setDislikeCounts((c) => ({ ...c, [reportId]: (c[reportId] || 0) + 1 }));
     startVoteCooldown(fuelType);
+    await fetchReports();
   };
 
   const openReportDetail = (r, e) => {
