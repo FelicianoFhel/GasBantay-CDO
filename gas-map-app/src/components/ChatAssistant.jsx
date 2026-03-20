@@ -112,8 +112,9 @@ export default function ChatAssistant() {
               <p className="chat-assistant__sub">Groq · CDO gas prices help</p>
               {backendConfigured === false && (
                 <p className="chat-assistant__warn" role="status">
-                  Add <code>GROQ_API_KEY</code> in Vercel project env and redeploy, or set{' '}
-                  <code>VITE_CHAT_API_URL</code> for local dev.
+                  Add <code>GROQ_API_KEY</code> or <code>VITE_GROQ_API_KEY</code> in Vercel env and
+                  redeploy. For local Vite only, set <code>VITE_CHAT_API_URL</code> to your deployed{' '}
+                  <code>/api</code> base.
                 </p>
               )}
             </div>

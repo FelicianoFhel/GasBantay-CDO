@@ -1,5 +1,6 @@
 /**
- * Vercel Serverless — Groq chat (GROQ_API_KEY). Prompt Guard 2 pre-check, then Llama 3.1 chat.
+ * Vercel Serverless — Groq chat. Uses GROQ_API_KEY, or falls back to VITE_GROQ_API_KEY
+ * (same key many projects already set for client-side photo AI).
  */
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
@@ -17,6 +18,19 @@ Do not claim government or oil-company authority.`;
 
 const MAX_MESSAGES = 16;
 const MAX_CONTENT = 3500;
+
+function isPlaceholderKey(k) {
+  const s = String(k || '').toLowerCase();
+  return !s || s.includes('your-groq') || s.includes('your-groq-api-key');
+}
+
+function getGroqServerKey() {
+  const direct = process.env.GROQ_API_KEY;
+  const vite = process.env.VITE_GROQ_API_KEY;
+  if (direct && !isPlaceholderKey(direct)) return String(direct).trim();
+  if (vite && !isPlaceholderKey(vite)) return String(vite).trim();
+  return '';
+}
 
 /** Same shape as Groq curl for Prompt Guard (max_completion_tokens: 1 per your snippet). */
 function promptGuardPayload(userContent) {
@@ -77,8 +91,8 @@ export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
   if (req.method === 'GET') {
-    const key = process.env.GROQ_API_KEY;
-    const enabled = Boolean(key && String(key).length > 12 && !String(key).includes('your-'));
+    const key = getGroqServerKey();
+    const enabled = Boolean(key && key.length > 12);
     return res.status(200).json({ enabled });
   }
 
@@ -87,9 +101,12 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey || String(apiKey).includes('your-groq')) {
-    return res.status(503).json({ error: 'Assistant is not configured (set GROQ_API_KEY on Vercel).' });
+  const apiKey = getGroqServerKey();
+  if (!apiKey) {
+    return res.status(503).json({
+      error:
+        'Assistant is not configured. Set GROQ_API_KEY or VITE_GROQ_API_KEY in Vercel env and redeploy.',
+    });
   }
 
   let body = req.body;
