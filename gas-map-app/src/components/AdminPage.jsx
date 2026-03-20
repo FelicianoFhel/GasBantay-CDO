@@ -19,6 +19,9 @@ export default function AdminPage() {
   const [error, setError] = useState('');
   const [editingId, setEditingId] = useState('');
   const [form, setForm] = useState({ name: '', address: '', lat: '', lng: '' });
+  const [reports, setReports] = useState([]);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [reportsError, setReportsError] = useState('');
 
   const isLoggedIn = Boolean(token);
 
@@ -46,6 +49,26 @@ export default function AdminPage() {
   useEffect(() => {
     loadStations();
   }, [loadStations]);
+
+  const loadReports = useCallback(async () => {
+    if (!token) return;
+    setReportsLoading(true);
+    setReportsError('');
+    try {
+      const res = await fetch(`${apiBase()}/admin-reports`, { headers: authHeaders });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to load reports');
+      setReports(Array.isArray(data.reports) ? data.reports : []);
+    } catch (e) {
+      setReportsError(e.message || 'Failed to load reports');
+    } finally {
+      setReportsLoading(false);
+    }
+  }, [token, authHeaders]);
+
+  useEffect(() => {
+    loadReports();
+  }, [loadReports]);
 
   const onLogin = async (e) => {
     e.preventDefault();
@@ -94,6 +117,7 @@ export default function AdminPage() {
       if (!res.ok) throw new Error(data.error || 'Save failed');
       resetForm();
       await loadStations();
+      await loadReports();
     } catch (e2) {
       setError(e2.message || 'Save failed');
     } finally {
@@ -122,6 +146,7 @@ export default function AdminPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Delete failed');
       await loadStations();
+      await loadReports();
       if (editingId === id) resetForm();
     } catch (e2) {
       setError(e2.message || 'Delete failed');
@@ -132,7 +157,50 @@ export default function AdminPage() {
     localStorage.removeItem(TOKEN_KEY);
     setToken('');
     setStations([]);
+    setReports([]);
     resetForm();
+  };
+
+  const setVotes = async (report, direction) => {
+    const nextUp = Math.max(0, (report.upvotes || 0) + (direction === 'up' ? 1 : 0));
+    const nextDown = Math.max(0, (report.downvotes || 0) + (direction === 'down' ? 1 : 0));
+    setReportsError('');
+    try {
+      const res = await fetch(`${apiBase()}/admin-reports`, {
+        method: 'PATCH',
+        headers: authHeaders,
+        body: JSON.stringify({
+          action: 'set_votes',
+          report_id: report.id,
+          upvotes: nextUp,
+          downvotes: nextDown,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to update votes');
+      await loadReports();
+    } catch (e) {
+      setReportsError(e.message || 'Failed to update votes');
+    }
+  };
+
+  const setOfficial = async (reportId) => {
+    setReportsError('');
+    try {
+      const res = await fetch(`${apiBase()}/admin-reports`, {
+        method: 'PATCH',
+        headers: authHeaders,
+        body: JSON.stringify({
+          action: 'set_official',
+          report_id: reportId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to set official');
+      await loadReports();
+    } catch (e) {
+      setReportsError(e.message || 'Failed to set official');
+    }
   };
 
   if (!isLoggedIn) {
@@ -173,6 +241,9 @@ export default function AdminPage() {
           <div className="admin-head__actions">
             <button className="btn-secondary" type="button" onClick={loadStations}>
               Refresh
+            </button>
+            <button className="btn-secondary" type="button" onClick={loadReports}>
+              Refresh reports
             </button>
             <button className="btn-secondary" type="button" onClick={onLogout}>
               Logout
@@ -265,6 +336,59 @@ export default function AdminPage() {
                           onClick={() => onDelete(s.id)}
                         >
                           Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="admin-panel">
+          <h2>Price Reports ({reports.length})</h2>
+          <p className="admin-hint">
+            You can increase vote counts or mark a report as official price for its station + fuel.
+          </p>
+          {reportsError && <p className="admin-error">{reportsError}</p>}
+          {reportsLoading ? (
+            <p>Loading reports…</p>
+          ) : (
+            <div className="admin-table-wrap">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Station</th>
+                    <th>Fuel</th>
+                    <th>Price</th>
+                    <th>Votes</th>
+                    <th>Official</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reports.map((r) => (
+                    <tr key={r.id}>
+                      <td>
+                        <strong>{r.station_name}</strong>
+                        <div className="admin-cell-sub">{r.station_address || '—'}</div>
+                      </td>
+                      <td>{r.fuel_type}</td>
+                      <td>₱{Number(r.price).toFixed(2)}</td>
+                      <td>
+                        👍 {r.upvotes || 0} · 👎 {r.downvotes || 0}
+                      </td>
+                      <td>{r.is_official ? 'Yes' : 'No'}</td>
+                      <td className="admin-table__actions">
+                        <button type="button" className="btn-secondary" onClick={() => setVotes(r, 'up')}>
+                          +👍
+                        </button>
+                        <button type="button" className="btn-secondary" onClick={() => setVotes(r, 'down')}>
+                          +👎
+                        </button>
+                        <button type="button" className="btn-secondary" onClick={() => setOfficial(r.id)}>
+                          Set official
                         </button>
                       </td>
                     </tr>

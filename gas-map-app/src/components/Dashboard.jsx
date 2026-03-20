@@ -92,6 +92,7 @@ export default function Dashboard({
   const [reports, setReports] = useState([]);
   const [upvoteCounts, setUpvoteCounts] = useState({});
   const [downvoteCounts, setDownvoteCounts] = useState({});
+  const [officialByStation, setOfficialByStation] = useState({});
   const [reportsLoading, setReportsLoading] = useState(true);
 
   // Fetch all price reports and upvote counts for current stations
@@ -100,12 +101,33 @@ export default function Dashboard({
       setReports([]);
       setUpvoteCounts({});
       setDownvoteCounts({});
+      setOfficialByStation({});
       setReportsLoading(false);
       return;
     }
     const stationIds = stations.map((s) => s.id);
     setReportsLoading(true);
     (async () => {
+      const { data: officialData } = await supabase
+        .from('official_station_prices')
+        .select('station_id,fuel_type,price')
+        .in('station_id', stationIds);
+      const officialMap = {};
+      (officialData || []).forEach((r) => {
+        if (!officialMap[r.station_id]) officialMap[r.station_id] = {};
+        officialMap[r.station_id][r.fuel_type] = {
+          id: `official-${r.station_id}-${r.fuel_type}`,
+          station_id: r.station_id,
+          fuel_type: r.fuel_type,
+          price: Number(r.price),
+          likes: 999999,
+          dislikes: 0,
+          score: 999999,
+          reported_at: new Date().toISOString(),
+        };
+      });
+      setOfficialByStation(officialMap);
+
       const { data: reportsData, error: e1 } = await supabase
         .from('price_reports')
         .select('*')
@@ -177,6 +199,14 @@ export default function Dashboard({
   }, [reports, upvoteCounts, downvoteCounts]);
 
   const { byStation, bestPhotoByStation } = getBestReportPerStation();
+  const byStationWithOfficial = useMemo(() => {
+    if (!Object.keys(officialByStation).length) return byStation;
+    const merged = { ...byStation };
+    Object.keys(officialByStation).forEach((sid) => {
+      merged[sid] = { ...(merged[sid] || {}), ...officialByStation[sid] };
+    });
+    return merged;
+  }, [byStation, officialByStation]);
 
   const getStationsWithDistance = useCallback(() => {
     if (!userPosition) return [];
@@ -196,7 +226,7 @@ export default function Dashboard({
     if (!withDist.length) return [];
     return withDist
       .map((s) => {
-        const report = byStation[s.id]?.[fuelType];
+        const report = byStationWithOfficial[s.id]?.[fuelType];
         return {
           ...s,
           price: report ? Number(report.price) : null,
@@ -206,7 +236,7 @@ export default function Dashboard({
       .filter((s) => s.price != null)
       .sort((a, b) => a.price - b.price || a.distance - b.distance)
       .slice(0, 10);
-  }, [getStationsWithDistance, byStation, fuelType, bestPhotoByStation]);
+  }, [getStationsWithDistance, byStationWithOfficial, fuelType, bestPhotoByStation]);
 
   const getNearMe = useCallback(() => {
     const withDist = getStationsWithDistance();

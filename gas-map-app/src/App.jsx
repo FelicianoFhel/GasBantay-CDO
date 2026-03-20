@@ -9,7 +9,7 @@ import { isSupabaseConfigured } from './lib/supabaseClient';
 import { supabase } from './lib/supabaseClient';
 import { getUserPosition, haversine } from './lib/geo';
 
-function trustedByStationFromReports(reports, upvoteCounts, downvoteCounts) {
+function trustedByStationFromReports(reports, upvoteCounts, downvoteCounts, officialRows = []) {
   const scored = reports.map((r) => ({
     ...r,
     likes: upvoteCounts[r.id] || 0,
@@ -41,6 +41,24 @@ function trustedByStationFromReports(reports, upvoteCounts, downvoteCounts) {
       bestFuelType: valid[0].fuelType,
     };
   });
+  if (officialRows.length) {
+    const grouped = {};
+    officialRows.forEach((o) => {
+      if (!grouped[o.station_id]) grouped[o.station_id] = [];
+      grouped[o.station_id].push(o);
+    });
+    Object.entries(grouped).forEach(([stationId, rows]) => {
+      const valid = rows
+        .map((r) => ({ fuelType: r.fuel_type, price: Number(r.price) }))
+        .filter((r) => Number.isFinite(r.price));
+      if (!valid.length) return;
+      valid.sort((a, b) => a.price - b.price);
+      byStation[stationId] = {
+        bestPrice: valid[0].price,
+        bestFuelType: valid[0].fuelType,
+      };
+    });
+  }
   return byStation;
 }
 
@@ -119,13 +137,21 @@ export default function App() {
     }
     const stationIds = filteredStations.map((s) => s.id);
     (async () => {
+      const { data: official } = await supabase
+        .from('official_station_prices')
+        .select('station_id,fuel_type,price')
+        .in('station_id', stationIds);
       const { data: reportsData, error } = await supabase
         .from('price_reports')
         .select('*')
         .in('station_id', stationIds)
         .order('reported_at', { ascending: false });
-      if (error || !reportsData?.length) {
-        setTrustedByStation({});
+      if (error) {
+        setTrustedByStation(trustedByStationFromReports([], {}, {}, official || []));
+        return;
+      }
+      if (!reportsData?.length) {
+        setTrustedByStation(trustedByStationFromReports([], {}, {}, official || []));
         return;
       }
       const reportIds = reportsData.map((r) => r.id);
@@ -146,7 +172,9 @@ export default function App() {
       (down || []).forEach((d) => {
         downCounts[d.report_id] = (downCounts[d.report_id] || 0) + 1;
       });
-      setTrustedByStation(trustedByStationFromReports(reportsData, upCounts, downCounts));
+      setTrustedByStation(
+        trustedByStationFromReports(reportsData, upCounts, downCounts, official || [])
+      );
     })();
   }, [filteredStations, reportsInvalidatedAt]);
 
