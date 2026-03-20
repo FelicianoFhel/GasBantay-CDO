@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { supabase } from '../lib/supabaseClient';
 
 const TOKEN_KEY = 'cdo_admin_token';
 
@@ -6,6 +7,36 @@ function apiBase() {
   const raw = import.meta.env.VITE_CHAT_API_URL;
   if (raw && String(raw).trim()) return String(raw).replace(/\/$/, '');
   return '/api';
+}
+
+async function hydrateVoteCountsFromPublic(reports) {
+  if (!Array.isArray(reports) || reports.length === 0) return reports;
+  const reportIds = reports.map((r) => r.id).filter(Boolean);
+  if (reportIds.length === 0) return reports;
+
+  const [{ data: upRows }, { data: downRows }] = await Promise.all([
+    supabase.from('upvotes').select('report_id').in('report_id', reportIds),
+    supabase.from('downvotes').select('report_id').in('report_id', reportIds),
+  ]);
+
+  const up = {};
+  const down = {};
+  reportIds.forEach((id) => {
+    up[id] = 0;
+    down[id] = 0;
+  });
+  (upRows || []).forEach((row) => {
+    up[row.report_id] = (up[row.report_id] || 0) + 1;
+  });
+  (downRows || []).forEach((row) => {
+    down[row.report_id] = (down[row.report_id] || 0) + 1;
+  });
+
+  return reports.map((r) => ({
+    ...r,
+    upvotes: up[r.id] ?? 0,
+    downvotes: down[r.id] ?? 0,
+  }));
 }
 
 export default function AdminPage() {
@@ -24,6 +55,38 @@ export default function AdminPage() {
   const [reportsError, setReportsError] = useState('');
 
   const isLoggedIn = Boolean(token);
+  const reportGroups = useMemo(() => {
+    const byStation = new Map();
+    reports.forEach((r) => {
+      const stationId = r.station_id || 'unknown';
+      if (!byStation.has(stationId)) {
+        byStation.set(stationId, {
+          station_id: stationId,
+          station_name: r.station_name || 'Station',
+          station_address: r.station_address || null,
+          reportsByFuel: new Map(),
+        });
+      }
+      const station = byStation.get(stationId);
+      const fuel = r.fuel_type || 'unknown';
+      const current = station.reportsByFuel.get(fuel);
+      const currentScore = (current?.upvotes || 0) - (current?.downvotes || 0);
+      const nextScore = (r.upvotes || 0) - (r.downvotes || 0);
+      const currentTs = new Date(current?.reported_at || current?.created_at || 0).getTime();
+      const nextTs = new Date(r.reported_at || r.created_at || 0).getTime();
+      const shouldReplace =
+        !current || nextScore > currentScore || (nextScore === currentScore && nextTs > currentTs);
+      if (shouldReplace) station.reportsByFuel.set(fuel, r);
+    });
+    return Array.from(byStation.values())
+      .map((g) => ({
+        ...g,
+        fuels: Array.from(g.reportsByFuel.values()).sort((a, b) =>
+          String(a.fuel_type || '').localeCompare(String(b.fuel_type || ''))
+        ),
+      }))
+      .sort((a, b) => a.station_name.localeCompare(b.station_name));
+  }, [reports]);
 
   const authHeaders = useMemo(
     () => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }),
@@ -58,7 +121,9 @@ export default function AdminPage() {
       const res = await fetch(`${apiBase()}/admin-reports`, { headers: authHeaders });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Failed to load reports');
-      setReports(Array.isArray(data.reports) ? data.reports : []);
+      const baseReports = Array.isArray(data.reports) ? data.reports : [];
+      const withLiveVotes = await hydrateVoteCountsFromPublic(baseReports).catch(() => baseReports);
+      setReports(withLiveVotes);
     } catch (e) {
       setReportsError(e.message || 'Failed to load reports');
     } finally {
@@ -347,55 +412,65 @@ export default function AdminPage() {
         </section>
 
         <section className="admin-panel">
-          <h2>Price Reports ({reports.length})</h2>
+          <h2>Price Reports ({reportGroups.length} stations)</h2>
           <p className="admin-hint">
             You can increase vote counts or mark a report as official price for its station + fuel.
           </p>
           {reportsError && <p className="admin-error">{reportsError}</p>}
           {reportsLoading ? (
             <p>Loading reports…</p>
+          ) : reportGroups.length === 0 ? (
+            <p>No reports yet.</p>
           ) : (
-            <div className="admin-table-wrap">
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th>Station</th>
-                    <th>Fuel</th>
-                    <th>Price</th>
-                    <th>Votes</th>
-                    <th>Official</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reports.map((r) => (
-                    <tr key={r.id}>
-                      <td>
-                        <strong>{r.station_name}</strong>
-                        <div className="admin-cell-sub">{r.station_address || '—'}</div>
-                      </td>
-                      <td>{r.fuel_type}</td>
-                      <td>₱{Number(r.price).toFixed(2)}</td>
-                      <td>
-                        👍 {r.upvotes || 0} · 👎 {r.downvotes || 0}
-                      </td>
-                      <td>{r.is_official ? 'Yes' : 'No'}</td>
-                      <td className="admin-table__actions">
-                        <button type="button" className="btn-secondary" onClick={() => setVotes(r, 'up')}>
-                          +👍
-                        </button>
-                        <button type="button" className="btn-secondary" onClick={() => setVotes(r, 'down')}>
-                          +👎
-                        </button>
-                        <button type="button" className="btn-secondary" onClick={() => setOfficial(r.id)}>
-                          Set official
-                        </button>
-                      </td>
+            reportGroups.map((group) => (
+              <div className="admin-table-wrap" key={group.station_id}>
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Station</th>
+                      <th>Price</th>
+                      <th>Fuel</th>
+                      <th>Votes</th>
+                      <th>Official</th>
+                      <th>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {group.fuels.map((r, idx) => (
+                      <tr key={r.id}>
+                        <td>
+                          {idx === 0 ? (
+                            <>
+                              <strong>{group.station_name}</strong>
+                              <div className="admin-cell-sub">{group.station_address || '—'}</div>
+                            </>
+                          ) : (
+                            <span className="admin-cell-sub">↳ {group.station_name}</span>
+                          )}
+                        </td>
+                        <td>₱{Number(r.price).toFixed(2)}</td>
+                        <td>{r.fuel_type}</td>
+                        <td>
+                          👍 {r.upvotes || 0} · 👎 {r.downvotes || 0}
+                        </td>
+                        <td>{r.is_official ? 'Yes' : 'No'}</td>
+                        <td className="admin-table__actions">
+                          <button type="button" className="btn-secondary" onClick={() => setVotes(r, 'up')}>
+                            +👍
+                          </button>
+                          <button type="button" className="btn-secondary" onClick={() => setVotes(r, 'down')}>
+                            +👎
+                          </button>
+                          <button type="button" className="btn-secondary" onClick={() => setOfficial(r.id)}>
+                            Set official
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))
           )}
         </section>
       </section>
