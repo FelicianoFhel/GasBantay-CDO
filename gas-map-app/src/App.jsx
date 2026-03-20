@@ -6,6 +6,7 @@ import SearchBar from './components/SearchBar';
 import ChatAssistant from './components/ChatAssistant';
 import { isSupabaseConfigured } from './lib/supabaseClient';
 import { supabase } from './lib/supabaseClient';
+import { getUserPosition } from './lib/geo';
 
 function filterStationsBySearch(stations, query) {
   if (!query || !query.trim()) return stations;
@@ -24,6 +25,9 @@ export default function App() {
   const [stationsError, setStationsError] = useState(null);
   const [reportsInvalidatedAt, setReportsInvalidatedAt] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [userPosition, setUserPosition] = useState(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState(null);
 
   const filteredStations = useMemo(
     () => filterStationsBySearch(stations, searchQuery),
@@ -65,6 +69,20 @@ export default function App() {
     setReportsInvalidatedAt((t) => t + 1);
   }, []);
 
+  const requestLocation = useCallback(() => {
+    setLocationLoading(true);
+    setLocationError(null);
+    getUserPosition()
+      .then((pos) => {
+        setUserPosition(pos);
+        setLocationLoading(false);
+      })
+      .catch((err) => {
+        setLocationError(err.message || 'Location unavailable');
+        setLocationLoading(false);
+      });
+  }, []);
+
   return (
     <>
       {!isSupabaseConfigured && (
@@ -95,6 +113,10 @@ export default function App() {
           reportsInvalidatedAt={reportsInvalidatedAt}
           onSelectStation={handleSelectStation}
           searchQuery={searchQuery}
+          userPosition={userPosition}
+          onRequestLocation={requestLocation}
+          locationLoading={locationLoading}
+          locationError={locationError}
         />
         <section className="map-section" aria-label="Map">
           <div className="map-section-head">
@@ -123,7 +145,7 @@ export default function App() {
           onReportSubmitted={handleReportSubmitted}
         />
       )}
-      <ChatAssistant />
+      <ChatAssistant stations={filteredStations} userPosition={userPosition} />
     </>
   );
 }

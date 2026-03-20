@@ -1,9 +1,34 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import Markdown from 'react-markdown';
 import { chatPostUrl, chatStatusUrl } from '../lib/chatApi';
+import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
+import { fetchChatDataContext } from '../lib/chatDataContext';
 
-export default function ChatAssistant() {
+const PREDEFINED_QUESTIONS = [
+  {
+    label: 'Presyo duol nako',
+    text: 'Unsa ang available nga presyo sa gas duol nako karon? Gamita ang LIVE_APP_DATA aron ipakita ang mga estasyon, distansya, ug presyo sa Diesel, Regular, ug Premium.',
+  },
+  {
+    label: 'Unsaon pag-submit?',
+    text: 'Paghisguti formal: giunsa pag-submit og presyo sa Gas Bantay app, unsang fuel types (Diesel, Regular/Green, Premium/Red), ug ang voting.',
+  },
+  {
+    label: 'Unsa ang Gas Bantay?',
+    text: 'Kinsa ang Gas Bantay / CDO Gas Price Map ug unsa ang katuyoan niini alang sa komunidad sa Cagayan de Oro?',
+  },
+];
+
+function ChatMarkdown({ content }) {
+  return (
+    <div className="chat-assistant__md">
+      <Markdown>{content}</Markdown>
+    </div>
+  );
+}
+
+export default function ChatAssistant({ stations = [], userPosition = null }) {
   const [open, setOpen] = useState(false);
-  /** Server has GROQ_API_KEY (from GET /api/chat). FAB is always shown regardless. */
   const [backendConfigured, setBackendConfigured] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -37,38 +62,58 @@ export default function ChatAssistant() {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, open, sending]);
 
-  const send = useCallback(async () => {
-    const text = input.trim();
-    if (!text || sending) return;
-    setError(null);
-    setInput('');
-    const nextUser = { role: 'user', content: text };
-    setMessages((m) => [...m, nextUser]);
-    setSending(true);
-    try {
-      const payload = {
-        messages: [...messages, nextUser].map(({ role, content }) => ({ role, content })),
-      };
-      const res = await fetch(chatPostUrl(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const parts = [data.error, data.hint].filter(Boolean);
-        throw new Error(parts.length ? parts.join(' — ') : `Request failed (${res.status})`);
+  const sendWithText = useCallback(
+    async (text) => {
+      const trimmed = text.trim();
+      if (!trimmed || sending) return;
+      setError(null);
+      setInput('');
+      const nextUser = { role: 'user', content: trimmed };
+      setMessages((m) => [...m, nextUser]);
+      setSending(true);
+      try {
+        let context = '';
+        if (isSupabaseConfigured && stations?.length) {
+          try {
+            context = await fetchChatDataContext(supabase, stations, userPosition);
+          } catch {
+            context = '_(Dili ma-load ang live data gikan sa database.)_';
+          }
+        } else {
+          context =
+            '_(Walay Supabase connection o way stations sa view — tubaga nga walay live nga tabla.)_';
+        }
+
+        const payload = {
+          messages: [...messages, nextUser].map(({ role, content }) => ({ role, content })),
+          context,
+        };
+        const res = await fetch(chatPostUrl(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const parts = [data.error, data.hint].filter(Boolean);
+          throw new Error(parts.length ? parts.join(' — ') : `Request failed (${res.status})`);
+        }
+        if (!data.reply) throw new Error('No reply from assistant');
+        setMessages((m) => [...m, { role: 'assistant', content: data.reply }]);
+      } catch (e) {
+        setError(e.message || 'Something went wrong');
+        setMessages((m) => m.slice(0, -1));
+        setInput(trimmed);
+      } finally {
+        setSending(false);
       }
-      if (!data.reply) throw new Error('No reply from assistant');
-      setMessages((m) => [...m, { role: 'assistant', content: data.reply }]);
-    } catch (e) {
-      setError(e.message || 'Something went wrong');
-      setMessages((m) => m.slice(0, -1));
-      setInput(text);
-    } finally {
-      setSending(false);
-    }
-  }, [input, messages, sending]);
+    },
+    [sending, messages, stations, userPosition]
+  );
+
+  const send = useCallback(() => {
+    sendWithText(input);
+  }, [input, sendWithText]);
 
   const onKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -86,7 +131,7 @@ export default function ChatAssistant() {
           onClick={() => setOpen(true)}
           aria-expanded={false}
           aria-haspopup="dialog"
-          aria-label="Open fuel map assistant"
+          aria-label="Ablihi ang assistant sa mapa"
         >
           <span className="chat-assistant__fab-icon" aria-hidden>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -110,7 +155,9 @@ export default function ChatAssistant() {
               <h2 id="chat-assistant-title" className="chat-assistant__title">
                 Map assistant
               </h2>
-              <p className="chat-assistant__sub">Groq · CDO gas prices help</p>
+              <p className="chat-assistant__sub">
+                Groq · Bisaya default · multilingual · live prices gikan DB
+              </p>
               {backendConfigured === false && (
                 <p className="chat-assistant__warn" role="status">
                   Add <code>GROQ_API_KEY</code> or <code>VITE_GROQ_API_KEY</code> in Vercel env and
@@ -132,7 +179,9 @@ export default function ChatAssistant() {
           <div className="chat-assistant__body" ref={listRef}>
             {messages.length === 0 && (
               <p className="chat-assistant__empty">
-                Ask how to submit a price, use the map, or what Diesel / Regular / Premium mean.
+                Default language: <strong>Bisaya</strong>. You can also type in English or Filipino.
+                Ibutang ang <strong>Use my location</strong> sa dashboard aron mas tukma ang “duol
+                nako.”
               </p>
             )}
             {messages.map((m, i) => (
@@ -140,7 +189,11 @@ export default function ChatAssistant() {
                 key={`${i}-${m.role}`}
                 className={`chat-assistant__msg chat-assistant__msg--${m.role}`}
               >
-                {m.content}
+                {m.role === 'assistant' ? (
+                  <ChatMarkdown content={m.content} />
+                ) : (
+                  m.content
+                )}
               </div>
             ))}
             {sending && (
@@ -155,6 +208,20 @@ export default function ChatAssistant() {
               {error}
             </p>
           )}
+
+          <div className="chat-assistant__chips" role="group" aria-label="Suggested questions">
+            {PREDEFINED_QUESTIONS.map(({ label, text }) => (
+              <button
+                key={label}
+                type="button"
+                className="chat-assistant__chip"
+                disabled={sending}
+                onClick={() => sendWithText(text)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
           <div className="chat-assistant__foot">
             <textarea

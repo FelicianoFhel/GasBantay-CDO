@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { getUserPosition, haversine } from '../lib/geo';
+import { haversine } from '../lib/geo';
 import { FUEL_TYPES } from '../constants';
 
 const TREND_DAYS = 7;
@@ -78,10 +78,16 @@ function TrendChevron({ direction }) {
   );
 }
 
-export default function Dashboard({ stations, reportsInvalidatedAt = 0, searchQuery = '', onSelectStation }) {
-  const [userPosition, setUserPosition] = useState(null);
-  const [locationLoading, setLocationLoading] = useState(false);
-  const [locationError, setLocationError] = useState(null);
+export default function Dashboard({
+  stations,
+  reportsInvalidatedAt = 0,
+  searchQuery = '',
+  onSelectStation,
+  userPosition,
+  onRequestLocation,
+  locationLoading,
+  locationError,
+}) {
   const [fuelType, setFuelType] = useState('diesel');
   const [reports, setReports] = useState([]);
   const [upvoteCounts, setUpvoteCounts] = useState({});
@@ -171,20 +177,6 @@ export default function Dashboard({ stations, reportsInvalidatedAt = 0, searchQu
   }, [reports, upvoteCounts, downvoteCounts]);
 
   const { byStation, bestPhotoByStation } = getBestReportPerStation();
-
-  const requestLocation = useCallback(() => {
-    setLocationLoading(true);
-    setLocationError(null);
-    getUserPosition()
-      .then((pos) => {
-        setUserPosition(pos);
-        setLocationLoading(false);
-      })
-      .catch((err) => {
-        setLocationError(err.message || 'Location unavailable');
-        setLocationLoading(false);
-      });
-  }, []);
 
   const getStationsWithDistance = useCallback(() => {
     if (!userPosition) return [];
@@ -299,7 +291,7 @@ export default function Dashboard({ stations, reportsInvalidatedAt = 0, searchQu
             <button
               type="button"
               className="btn-primary dashboard-btn"
-              onClick={requestLocation}
+              onClick={onRequestLocation}
               disabled={locationLoading}
             >
               {locationLoading ? 'Getting location…' : 'Use my location'}

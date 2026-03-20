@@ -8,15 +8,24 @@ const GUARD_MODEL = 'meta-llama/llama-prompt-guard-2-22m';
 /** Production ID on Groq (no meta-llama/ prefix) — wrong id returns 400 and breaks chat. */
 const CHAT_MODEL = 'llama-3.1-8b-instant';
 
-const SYSTEM = `You are the assistant for "CDO Gas Price Map" (Gas Bantay) — a community crowdsourced fuel price app for Cagayan de Oro, Philippines.
+const SYSTEM_BASE = `You are the professional assistant for **CDO Gas Price Map** (*Gas Bantay*) — community-reported fuel prices in Cagayan de Oro, Philippines.
 
-Help users with:
-- How to read the map, submit prices, vote on reports, and fuel types (Diesel, Regular/Green, Premium/Red).
-- General guidance in English or Filipino (Tagalog); keep answers short and practical.
+## Language
+- **Default:** Reply in **Bisaya (Cebuano)** unless the user writes clearly in another language (English, Tagalog/Filipino, etc.) — then mirror their language.
+- You may offer short bilingual labels when helpful (e.g. key terms in English).
 
-Do not invent live prices. If asked for exact station prices, say prices come from user reports on the map and they should check the app.
-Do not claim government or oil-company authority.`;
+## Format (required)
+- Use **GitHub-flavored Markdown**: short **bold** labels, bullet/numbered lists, and blank lines between sections.
+- Keep a calm, formal tone; use clear headings like \`###\` for sections when the answer is long.
+- Do not use raw HTML.
 
+## Data rules
+- When a **LIVE_APP_DATA** block is provided below, treat station names and **₱ prices** there as the **only** authoritative numbers. Do not invent or change figures.
+- If the user asks for "near me" but location was not shared, say so politely and suggest **Use my location** on the dashboard or using the map.
+- If no price appears in the table for a station/fuel, say **walay report karon** / no trusted report yet — do not guess.
+- Never claim government or oil-company official pricing.`;
+
+const MAX_CONTEXT_CHARS = 12000;
 const MAX_MESSAGES = 16;
 const MAX_CONTENT = 3500;
 
@@ -46,12 +55,23 @@ function promptGuardPayload(userContent) {
   };
 }
 
-function chatPayload(messagesForModel) {
+function buildSystemWithContext(contextRaw) {
+  const ctx = typeof contextRaw === 'string' ? contextRaw.trim().slice(0, MAX_CONTEXT_CHARS) : '';
+  if (!ctx) return SYSTEM_BASE;
+  return `${SYSTEM_BASE}
+
+---
+## LIVE_APP_DATA (authoritative; use only these numbers for prices and station list)
+
+${ctx}`;
+}
+
+function chatPayload(messagesForModel, contextRaw) {
   return {
     model: CHAT_MODEL,
-    messages: [{ role: 'system', content: SYSTEM }, ...messagesForModel],
-    temperature: 0.5,
-    max_completion_tokens: 600,
+    messages: [{ role: 'system', content: buildSystemWithContext(contextRaw) }, ...messagesForModel],
+    temperature: 0.45,
+    max_completion_tokens: 1024,
     top_p: 1,
     stream: false,
     stop: null,
@@ -154,6 +174,9 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'No user message to check' });
   }
 
+  const contextRaw =
+    typeof body?.context === 'string' ? body.context.slice(0, MAX_CONTEXT_CHARS) : '';
+
   try {
     const guardBody = promptGuardPayload(latestUser.content);
     const guardOut = await groqPost(apiKey, guardBody);
@@ -172,7 +195,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const chatOut = await groqPost(apiKey, chatPayload(messages));
+    const chatOut = await groqPost(apiKey, chatPayload(messages, contextRaw));
     if (!chatOut.res.ok) {
       const hint = groqApiErrorMessage(chatOut.text, chatOut.data);
       console.error('[api/chat] Groq chat', chatOut.res.status, chatOut.text.slice(0, 500));
