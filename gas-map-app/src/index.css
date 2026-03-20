@@ -951,6 +951,115 @@ html, body, #root {
   margin-top: var(--space-2);
 }
 
+.btn-take-photo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.btn-take-photo__icon {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+}
+
+.btn-take-photo:hover .btn-take-photo__icon,
+.btn-take-photo:focus-visible .btn-take-photo__icon {
+  color: var(--color-text);
+}
+
+/* Webcam capture (desktop “Take photo”) */
+.webcam-capture-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(3px);
+}
+
+.webcam-capture-modal {
+  width: 100%;
+  max-width: 400px;
+  max-height: min(90vh, 560px);
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-modal);
+  overflow: hidden;
+}
+
+.webcam-capture-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.webcam-capture-modal__head h4 {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  color: var(--color-text);
+}
+
+.webcam-capture-modal__close {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.webcam-capture-modal__close:hover,
+.webcam-capture-modal__close:focus-visible {
+  background: var(--color-border-light);
+  outline: none;
+}
+
+.webcam-capture-modal__video {
+  width: 100%;
+  max-height: 50vh;
+  object-fit: cover;
+  background: #0f172a;
+  aspect-ratio: 4 / 3;
+}
+
+.webcam-capture-modal__err {
+  margin: 0;
+  padding: var(--space-5) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-error);
+  text-align: center;
+}
+
+.webcam-capture-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-top: 1px solid var(--color-border-light);
+}
+
+.webcam-capture-modal__actions .btn-primary,
+.webcam-capture-modal__actions .btn-secondary {
+  flex: 1;
+  min-width: 120px;
+}
+
 .form-photo-name,
 .form-photo-hint {
   margin-top: var(--space-1);
@@ -1126,6 +1235,79 @@ html, body, #root {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+}
+
+.dashboard-fuel-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.dashboard-fuel-card {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dashboard-fuel-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 1.5rem;
+}
+
+.dashboard-fuel-card__fuel {
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(248, 250, 252, 0.92);
+}
+
+.dashboard-fuel-card__hint {
+  margin: 0;
+  font-size: 0.6875rem;
+  color: rgba(226, 232, 240, 0.72);
+}
+
+.dashboard-fuel-card__price {
+  margin: var(--space-1) 0 0;
+  font-size: clamp(1.25rem, 3vw, 1.5rem);
+  font-weight: var(--font-bold);
+  color: #ffffff;
+  letter-spacing: -0.02em;
+}
+
+.dashboard-fuel-card__price--empty {
+  font-weight: var(--font-semibold);
+  color: rgba(248, 250, 252, 0.45);
+}
+
+.dashboard-fuel-card__meta {
+  margin: var(--space-2) 0 0;
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  color: rgba(226, 232, 240, 0.65);
+}
+
+.dashboard-fuel-card__trend {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dashboard-fuel-card__trend--up {
+  color: #4ade80;
+}
+
+.dashboard-fuel-card__trend--down {
+  color: #f87171;
 }
 
 .dashboard-stats {
@@ -1358,7 +1540,8 @@ html, body, #root {
     display: none;
   }
 
-  .dashboard-stats {
+  .dashboard-stats,
+  .dashboard-fuel-cards {
     grid-template-columns: 1fr;
   }
 

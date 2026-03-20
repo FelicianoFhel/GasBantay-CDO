@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { extractPriceFromImage, isGroqConfigured } from '../lib/groq';
 import { FUEL_TYPES, PRICE_MIN, PRICE_MAX } from '../constants';
@@ -38,6 +38,44 @@ const initialPrices = () => ({
   premium_red: '',
 });
 
+function CameraIcon() {
+  return (
+    <svg
+      className="btn-take-photo__icon"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+    >
+      <path
+        d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3.17L8.4 3.6A2 2 0 0 1 10.07 3h3.86a2 2 0 0 1 1.67.9L17.83 6H21a2 2 0 0 1 2 2v11z"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle
+        cx="12"
+        cy="13"
+        r="4"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function prefersNativeCameraPicker() {
+  if (typeof window === 'undefined') return true;
+  const coarse = window.matchMedia?.('(pointer: coarse)')?.matches;
+  const touch = (navigator.maxTouchPoints ?? 0) > 0;
+  return Boolean(coarse || touch);
+}
+
 export default function SubmitPriceForm({ stationId, stationName, onSubmitted }) {
   const [prices, setPrices] = useState(initialPrices());
   const [photoFile, setPhotoFile] = useState(null);
@@ -47,6 +85,116 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
   const [extracting, setExtracting] = useState(false);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
+  const [webcamOpen, setWebcamOpen] = useState(false);
+  const [webcamError, setWebcamError] = useState(null);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+
+  const stopWebcam = useCallback(() => {
+    streamRef.current?.getTracks?.().forEach((t) => t.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setWebcamOpen(false);
+    setWebcamError(null);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks?.().forEach((t) => t.stop());
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!webcamOpen) return;
+    let cancelled = false;
+    setWebcamError(null);
+    (async () => {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error('Camera is not supported in this browser.');
+        }
+        const tryConstraints = [
+          { video: { facingMode: { ideal: 'environment' } }, audio: false },
+          { video: { facingMode: 'user' }, audio: false },
+          { video: true, audio: false },
+        ];
+        let stream = null;
+        for (const c of tryConstraints) {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia(c);
+            break;
+          } catch {
+            /* try next */
+          }
+        }
+        if (!stream) throw new Error('Could not access a camera.');
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        const el = videoRef.current;
+        if (el) {
+          el.srcObject = stream;
+          await el.play().catch(() => {});
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setWebcamError(
+            e?.message?.includes('Permission') || e?.name === 'NotAllowedError'
+              ? 'Camera permission was denied.'
+              : e?.message || 'Could not open camera.'
+          );
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      streamRef.current?.getTracks?.().forEach((t) => t.stop());
+      streamRef.current = null;
+      if (videoRef.current) videoRef.current.srcObject = null;
+    };
+  }, [webcamOpen]);
+
+  const captureWebcamPhoto = () => {
+    const video = videoRef.current;
+    if (!video || video.videoWidth < 2) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0);
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) return;
+        const file = new File([blob], `price-photo-${Date.now()}.jpg`, {
+          type: 'image/jpeg',
+        });
+        setPhotoFile(file);
+        stopWebcam();
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        if (cameraInputRef.current) cameraInputRef.current.value = '';
+      },
+      'image/jpeg',
+      0.92
+    );
+  };
+
+  const openTakePhoto = () => {
+    setMessage(null);
+    setMessageType('');
+    if (prefersNativeCameraPicker()) {
+      cameraInputRef.current?.click();
+      return;
+    }
+    setWebcamOpen(true);
+  };
+
+  const onFileChosen = (e) => {
+    setPhotoFile(e.target.files?.[0] || null);
+    e.target.value = '';
+  };
 
   const setPrice = (fuelType, value) => {
     setPrices((prev) => ({ ...prev, [fuelType]: value }));
@@ -147,6 +295,7 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
     setPrices(initialPrices());
     setPhotoFile(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
     setMessage(entries.length > 1 ? `Thanks! ${entries.length} prices reported.` : 'Thanks! Price reported.');
     setMessageType('success');
     onSubmitted?.();
@@ -183,8 +332,8 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
             id="report-photo"
             type="file"
             className="form-input form-input--hidden"
-            accept="image/*"
-            onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
+            accept="image/jpeg,image/png,image/webp,image/heic,.heic"
+            onChange={onFileChosen}
           />
           <input
             ref={cameraInputRef}
@@ -193,7 +342,7 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
             className="form-input form-input--hidden"
             accept="image/*"
             capture="environment"
-            onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
+            onChange={onFileChosen}
           />
           <div className="form-photo-actions">
             <button
@@ -205,9 +354,10 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
             </button>
             <button
               type="button"
-              className="btn-secondary"
-              onClick={() => cameraInputRef.current?.click()}
+              className="btn-secondary btn-take-photo"
+              onClick={openTakePhoto}
             >
+              <CameraIcon />
               Take photo
             </button>
           </div>
@@ -249,6 +399,71 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
           {submitting ? 'Submitting…' : 'Submit price'}
         </button>
       </form>
+
+      {webcamOpen && (
+        <div
+          className="webcam-capture-layer"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="webcam-capture-title"
+          onClick={stopWebcam}
+        >
+          <div
+            className="webcam-capture-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="webcam-capture-modal__head">
+              <h4 id="webcam-capture-title">Take photo</h4>
+              <button
+                type="button"
+                className="webcam-capture-modal__close"
+                onClick={stopWebcam}
+                aria-label="Close camera"
+              >
+                ×
+              </button>
+            </div>
+            {webcamError ? (
+              <p className="webcam-capture-modal__err" role="alert">
+                {webcamError}
+              </p>
+            ) : (
+              <video
+                ref={videoRef}
+                className="webcam-capture-modal__video"
+                playsInline
+                muted
+              />
+            )}
+            <div className="webcam-capture-modal__actions">
+              {!webcamError && (
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={captureWebcamPhoto}
+                >
+                  Use photo
+                </button>
+              )}
+              <button type="button" className="btn-secondary" onClick={stopWebcam}>
+                Cancel
+              </button>
+              {webcamError && (
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => {
+                    stopWebcam();
+                    fileInputRef.current?.click();
+                  }}
+                >
+                  Choose file instead
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
