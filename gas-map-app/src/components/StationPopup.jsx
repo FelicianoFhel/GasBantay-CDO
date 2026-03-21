@@ -392,62 +392,75 @@ export default function StationPopup({
             ×
           </button>
         </div>
-        {station.address && (
-          <p className="station-panel__address">{station.address}</p>
-        )}
+        <div
+          className="station-panel__scroll"
+          tabIndex={-1}
+          aria-label="Station information"
+        >
+          {station.address && (
+            <p className="station-panel__address station-panel__address--in-scroll">
+              {station.address}
+            </p>
+          )}
 
-        {externalNav && (
-          <div className="station-panel__directions">
-            <h3 className="station-panel__directions-title">Route</h3>
-            <DirectionsMiniMap
-              destLat={station.lat}
-              destLng={station.lng}
-              originLat={userPosition?.lat}
-              originLng={userPosition?.lng}
-              destLabel={station.name || 'Station'}
-            />
-            <details className="station-panel__nav-external">
-              <summary className="station-panel__nav-external-summary">
-                Open in another app (voice turn-by-turn)
-              </summary>
-              <div className="station-panel__nav">
-                <a
-                  className="station-panel__nav-link station-panel__nav-link--primary"
-                  href={externalNav.google}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={`${externalNav.labelBase} in Google Maps`}
-                >
-                  Google Maps
-                </a>
-                {externalNav.waze && (
+          {externalNav && (
+            <div className="station-panel__directions">
+              <h3 className="station-panel__directions-title">Route</h3>
+              <p className="station-panel__directions-hint">
+                Swipe up for prices and reports. Use +/− to zoom the map.
+              </p>
+              <DirectionsMiniMap
+                destLat={station.lat}
+                destLng={station.lng}
+                originLat={userPosition?.lat}
+                originLng={userPosition?.lng}
+                destLabel={station.name || 'Station'}
+                variant="station-sheet"
+              />
+              <details className="station-panel__nav-external">
+                <summary className="station-panel__nav-external-summary">
+                  Open in another app (voice turn-by-turn)
+                </summary>
+                <div className="station-panel__nav">
                   <a
-                    className="station-panel__nav-link"
-                    href={externalNav.waze}
+                    className="station-panel__nav-link station-panel__nav-link--primary"
+                    href={externalNav.google}
                     target="_blank"
                     rel="noopener noreferrer"
-                    aria-label={`${externalNav.labelBase} in Waze`}
+                    aria-label={`${externalNav.labelBase} in Google Maps`}
                   >
-                    Waze
+                    Google Maps
                   </a>
-                )}
-                {externalNav.apple && (
-                  <a
-                    className="station-panel__nav-link"
-                    href={externalNav.apple}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={`${externalNav.labelBase} in Apple Maps`}
-                  >
-                    Apple Maps
-                  </a>
-                )}
-              </div>
-            </details>
-          </div>
-        )}
+                  {externalNav.waze && (
+                    <a
+                      className="station-panel__nav-link"
+                      href={externalNav.waze}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`${externalNav.labelBase} in Waze`}
+                    >
+                      Waze
+                    </a>
+                  )}
+                  {externalNav.apple && (
+                    <a
+                      className="station-panel__nav-link"
+                      href={externalNav.apple}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`${externalNav.labelBase} in Apple Maps`}
+                    >
+                      Apple Maps
+                    </a>
+                  )}
+                </div>
+              </details>
+            </div>
+          )}
 
-        <div className="station-panel__body">
+          <div
+            className={`station-panel__body ${externalNav ? 'station-panel__body--after-route' : ''}`}
+          >
           <section className="station-panel__section">
             <h3 className="station-panel__section-title">Latest prices</h3>
             {loading ? (
@@ -653,6 +666,7 @@ export default function StationPopup({
               onReportSubmitted?.();
             }}
           />
+          </div>
         </div>
       </div>
 

@@ -60,6 +60,8 @@ export default function DirectionsMiniMap({
   originLng,
   destLabel = 'Station',
   className = '',
+  /** When embedded in a scrollable station sheet: don’t steal scroll/pan from the parent. */
+  variant = 'default',
 }) {
   const [route, setRoute] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -112,15 +114,27 @@ export default function DirectionsMiniMap({
   if (!hasDest) return null;
 
   const center = [Number(destLat), Number(destLng)];
+  const inSheet = variant === 'station-sheet';
+  const rootClass = [
+    'directions-mini-map',
+    inSheet ? 'directions-mini-map--station-sheet' : '',
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
-    <div className={`directions-mini-map ${className}`.trim()}>
+    <div className={rootClass}>
       <div className="directions-mini-map__frame" aria-busy={loading}>
         <MapContainer
           center={center}
           zoom={15}
           style={{ height: '100%', width: '100%' }}
-          scrollWheelZoom
+          scrollWheelZoom={!inSheet}
+          dragging={!inSheet}
+          touchZoom={!inSheet}
+          doubleClickZoom={!inSheet}
+          boxZoom={!inSheet}
           zoomControl
         >
           <TileLayer
