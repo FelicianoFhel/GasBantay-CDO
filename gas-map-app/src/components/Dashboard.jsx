@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { haversine } from '../lib/geo';
 import { FUEL_TYPES } from '../constants';
-import { googleMapsDirectionsUrl } from '../lib/navigationLinks';
+import { isValidCoord } from '../lib/navigationLinks';
+import DirectionsModal from './DirectionsModal';
 
 const TREND_DAYS = 7;
 const TREND_EPS = 0.15;
@@ -95,6 +96,7 @@ export default function Dashboard({
   const [downvoteCounts, setDownvoteCounts] = useState({});
   const [officialByStation, setOfficialByStation] = useState({});
   const [reportsLoading, setReportsLoading] = useState(true);
+  const [directionsStation, setDirectionsStation] = useState(null);
 
   // Fetch all price reports and upvote counts for current stations
   useEffect(() => {
@@ -396,14 +398,7 @@ export default function Dashboard({
           </p>
         ) : (
           <div className="card-grid">
-            {cheapestList.map((s, i) => {
-              const directionsUrl = googleMapsDirectionsUrl({
-                destLat: s.lat,
-                destLng: s.lng,
-                originLat: userPosition?.lat,
-                originLng: userPosition?.lng,
-              });
-              return (
+            {cheapestList.map((s, i) => (
                 <div key={s.id} className="station-card-wrap">
                   <button
                     type="button"
@@ -427,20 +422,25 @@ export default function Dashboard({
                       <span className="station-card__meta">{s.distance.toFixed(1)} km away</span>
                     </div>
                   </button>
-                  {directionsUrl && (
-                    <a
-                      href={directionsUrl}
+                  {isValidCoord(s.lat, s.lng) && (
+                    <button
+                      type="button"
                       className="station-card__directions"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`Open directions to ${s.name} in Google Maps`}
+                      onClick={() =>
+                        setDirectionsStation({
+                          id: s.id,
+                          name: s.name,
+                          lat: s.lat,
+                          lng: s.lng,
+                        })
+                      }
+                      aria-label={`Show directions to ${s.name} in the app`}
                     >
                       Directions
-                    </a>
+                    </button>
                   )}
                 </div>
-              );
-            })}
+              ))}
           </div>
         )}
       </section>
@@ -454,14 +454,7 @@ export default function Dashboard({
           <p className="station-panel__muted">Loading…</p>
         ) : (
           <div className="card-grid">
-            {nearMeList.map((s) => {
-              const directionsUrl = googleMapsDirectionsUrl({
-                destLat: s.lat,
-                destLng: s.lng,
-                originLat: userPosition?.lat,
-                originLng: userPosition?.lng,
-              });
-              return (
+            {nearMeList.map((s) => (
                 <div key={s.id} className="station-card-wrap">
                   <button
                     type="button"
@@ -483,25 +476,39 @@ export default function Dashboard({
                       <span className="station-card__meta">{s.distance.toFixed(1)} km away</span>
                     </div>
                   </button>
-                  {directionsUrl && (
-                    <a
-                      href={directionsUrl}
+                  {isValidCoord(s.lat, s.lng) && (
+                    <button
+                      type="button"
                       className="station-card__directions"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`Open directions to ${s.name} in Google Maps`}
+                      onClick={() =>
+                        setDirectionsStation({
+                          id: s.id,
+                          name: s.name,
+                          lat: s.lat,
+                          lng: s.lng,
+                        })
+                      }
+                      aria-label={`Show directions to ${s.name} in the app`}
                     >
                       Directions
-                    </a>
+                    </button>
                   )}
                 </div>
-              );
-            })}
+              ))}
           </div>
         )}
       </section>
         </>
       )}
+      <DirectionsModal
+        open={Boolean(directionsStation)}
+        onClose={() => setDirectionsStation(null)}
+        stationName={directionsStation?.name}
+        destLat={directionsStation?.lat}
+        destLng={directionsStation?.lng}
+        originLat={userPosition?.lat}
+        originLng={userPosition?.lng}
+      />
     </div>
   );
 }

@@ -9,6 +9,7 @@ import {
 } from '../lib/voteCooldown';
 import { FUEL_TYPES } from '../constants';
 import SubmitPriceForm from './SubmitPriceForm';
+import DirectionsMiniMap from './DirectionsMiniMap';
 import {
   googleMapsDirectionsUrl,
   wazeNavigateUrl,
@@ -396,38 +397,53 @@ export default function StationPopup({
         )}
 
         {externalNav && (
-          <div className="station-panel__nav">
-            <a
-              className="station-panel__nav-link station-panel__nav-link--primary"
-              href={externalNav.google}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`${externalNav.labelBase} in Google Maps`}
-            >
-              Google Maps
-            </a>
-            {externalNav.waze && (
-              <a
-                className="station-panel__nav-link"
-                href={externalNav.waze}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={`${externalNav.labelBase} in Waze`}
-              >
-                Waze
-              </a>
-            )}
-            {externalNav.apple && (
-              <a
-                className="station-panel__nav-link"
-                href={externalNav.apple}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={`${externalNav.labelBase} in Apple Maps`}
-              >
-                Apple Maps
-              </a>
-            )}
+          <div className="station-panel__directions">
+            <h3 className="station-panel__directions-title">Route</h3>
+            <DirectionsMiniMap
+              destLat={station.lat}
+              destLng={station.lng}
+              originLat={userPosition?.lat}
+              originLng={userPosition?.lng}
+              destLabel={station.name || 'Station'}
+            />
+            <details className="station-panel__nav-external">
+              <summary className="station-panel__nav-external-summary">
+                Open in another app (voice turn-by-turn)
+              </summary>
+              <div className="station-panel__nav">
+                <a
+                  className="station-panel__nav-link station-panel__nav-link--primary"
+                  href={externalNav.google}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`${externalNav.labelBase} in Google Maps`}
+                >
+                  Google Maps
+                </a>
+                {externalNav.waze && (
+                  <a
+                    className="station-panel__nav-link"
+                    href={externalNav.waze}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`${externalNav.labelBase} in Waze`}
+                  >
+                    Waze
+                  </a>
+                )}
+                {externalNav.apple && (
+                  <a
+                    className="station-panel__nav-link"
+                    href={externalNav.apple}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`${externalNav.labelBase} in Apple Maps`}
+                  >
+                    Apple Maps
+                  </a>
+                )}
+              </div>
+            </details>
           </div>
         )}
 
