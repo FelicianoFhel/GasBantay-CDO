@@ -47,7 +47,7 @@ Open http://localhost:5173
    - `VITE_SUPABASE_ANON_KEY`
 5. Deploy from the **repository root** (where the root `vercel.json` and `api/` folder live), not only this subfolder, so `/api/chat` is included.
 6. **Groq chat assistant:** `/api/chat` uses **`GROQ_API_KEY`** if set, otherwise the same **`VITE_GROQ_API_KEY`** you use for photo AI (so one key is enough). Redeploy after changing env. The **Assistant** FAB calls `/api/chat`.
-7. **Local dev:** `npm run dev` does not serve `/api`. Either run `npx vercel dev` from the repo root, or set **`VITE_CHAT_API_URL`** in `.env` to your deployed API base, e.g. `https://your-project.vercel.app/api`.
+7. **Local dev:** `npm run dev` does not serve `/api` (no `/api/photo-moderate` or `/api/chat` on localhost). Either run **`npx vercel dev`** from the **repo root**, or set **`VITE_CHAT_API_URL`** in `.env` to your deployed API base (must end with `/api`), e.g. `https://your-project.vercel.app/api`. Without this, **photo verification** on submit will fail until the API is reachable.
 
 ## Features (MVP)
 

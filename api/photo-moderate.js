@@ -1,6 +1,7 @@
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
-const MAX_IMAGE_BASE64_CHARS = 6_000_000;
+// ~6.4MB base64; client compresses first; margin for edge cases
+const MAX_IMAGE_BASE64_CHARS = 8_500_000;
 const ALLOWED_MIME = new Set([
   'image/jpeg',
   'image/jpg',

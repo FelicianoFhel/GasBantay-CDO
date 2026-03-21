@@ -2,7 +2,68 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { extractPriceFromImage, isGroqConfigured } from '../lib/groq';
 import { moderatePhotoUpload } from '../lib/chatApi';
+import { compressImageFile } from '../lib/imageCompress';
 import { FUEL_TYPES, PRICE_MIN, PRICE_MAX } from '../constants';
+
+const COMPRESS_ON_PICK_MIN_BYTES = 450 * 1024;
+
+function pickSmallerImageFile(original, processed) {
+  if (!processed || processed === original) return original;
+  if (processed.size <= original.size) return processed;
+  return original;
+}
+
+function moderationUserMessage(err) {
+  const st = err?.status;
+  const msg = String(err?.message || '').toLowerCase();
+  if (st === 503 || msg.includes('not configured')) {
+    return 'Photo check isn’t available on this environment. Submit without a photo, or set GROQ_API_KEY on the server for /api/photo-moderate. If you use the app locally, set VITE_CHAT_API_URL in .env to your deployed API (e.g. https://your-app.vercel.app/api).';
+  }
+  if (st === 404) {
+    return 'Photo check URL was not found. For local dev, set VITE_CHAT_API_URL in .env to your API base (must include /api).';
+  }
+  if (st === 408 || msg.includes('timed out')) {
+    return 'Photo check timed out. Try again with the optimized photo, or submit without a photo.';
+  }
+  if (st === 502 || msg.includes('unavailable') || msg.includes('failed')) {
+    return 'Photo check service had a problem. Try again in a moment, or submit without a photo.';
+  }
+  if (st === 0 || msg.includes('network') || msg.includes('fetch')) {
+    return 'Could not reach the photo check service. Check your connection, or submit without a photo.';
+  }
+  return err?.message || 'Photo verification failed. Try again or submit without a photo.';
+}
+
+function AiPhaseProgress({ phase, variant }) {
+  if (!phase) return null;
+  const extractMap = {
+    preparing: { pct: 14, text: 'Preparing photo…' },
+    reading: { pct: 42, text: 'AI is extracting fuel & price…' },
+    almost: { pct: 74, text: 'Almost done…' },
+    finalizing: { pct: 92, text: 'Finishing up…' },
+    completed: { pct: 100, text: 'Completed' },
+  };
+  const submitMap = {
+    preparing: { pct: 12, text: 'Optimizing photo…' },
+    verifying: { pct: 38, text: 'AI is verifying your photo…' },
+    uploading: { pct: 62, text: 'Uploading photo…' },
+    saving: { pct: 88, text: 'Saving your prices…' },
+    completed: { pct: 100, text: 'All set!' },
+  };
+  const map = variant === 'extract' ? extractMap : submitMap;
+  const step = map[phase] || { pct: 8, text: 'Working…' };
+  return (
+    <div className="ai-phase-progress" role="status" aria-live="polite">
+      <p className="ai-phase-progress__text">{step.text}</p>
+      <div className="ai-phase-progress__track" aria-hidden="true">
+        <div
+          className="ai-phase-progress__fill"
+          style={{ width: `${step.pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 
 const BUCKET = 'report-photos';
 const MAX_FILE_MB = 5;
@@ -105,6 +166,10 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
   const [message, setMessage] = useState(null);
   const [messageType, setMessageType] = useState('');
   const [extracting, setExtracting] = useState(false);
+  const [extractPhase, setExtractPhase] = useState('');
+  const [submitPhase, setSubmitPhase] = useState('');
+  const [optimizingPhoto, setOptimizingPhoto] = useState(false);
+  const extractAlmostTimerRef = useRef(null);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const [webcamOpen, setWebcamOpen] = useState(false);
@@ -123,6 +188,15 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
   useEffect(() => {
     return () => {
       streamRef.current?.getTracks?.().forEach((t) => t.stop());
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (extractAlmostTimerRef.current != null) {
+        window.clearTimeout(extractAlmostTimerRef.current);
+        extractAlmostTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -188,18 +262,27 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
     if (!ctx) return;
     ctx.drawImage(video, 0, 0);
     canvas.toBlob(
-      (blob) => {
+      async (blob) => {
         if (!blob) return;
-        const file = new File([blob], `price-photo-${Date.now()}.jpg`, {
+        let file = new File([blob], `price-photo-${Date.now()}.jpg`, {
           type: 'image/jpeg',
         });
+        if (file.size > COMPRESS_ON_PICK_MIN_BYTES) {
+          setOptimizingPhoto(true);
+          try {
+            const compressed = await compressImageFile(file);
+            file = pickSmallerImageFile(file, compressed);
+          } finally {
+            setOptimizingPhoto(false);
+          }
+        }
         setPhotoFile(file);
         stopWebcam();
         if (fileInputRef.current) fileInputRef.current.value = '';
         if (cameraInputRef.current) cameraInputRef.current.value = '';
       },
       'image/jpeg',
-      0.92
+      0.88
     );
   };
 
@@ -215,17 +298,32 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
 
   const onFileChosen = (e) => {
     const selected = e.target.files?.[0] || null;
+    const input = e.target;
     if (selected && !isAllowedPhotoFile(selected)) {
       setPhotoFile(null);
       setMessage('Only PNG, JPEG/JPG, HEIC, and HEIF photos are allowed.');
       setMessageType('error');
-      e.target.value = '';
+      input.value = '';
       return;
     }
     setMessage(null);
     setMessageType('');
     setPhotoFile(selected);
-    e.target.value = '';
+    input.value = '';
+
+    if (selected && selected.size > COMPRESS_ON_PICK_MIN_BYTES) {
+      setOptimizingPhoto(true);
+      compressImageFile(selected)
+        .then((compressed) => {
+          const next = pickSmallerImageFile(selected, compressed);
+          if (next !== selected) {
+            setPhotoFile(next);
+            setMessage('Photo optimized for faster upload and AI checks.');
+            setMessageType('info');
+          }
+        })
+        .finally(() => setOptimizingPhoto(false));
+    }
   };
 
   const setPrice = (fuelType, value) => {
@@ -235,10 +333,34 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
   const handleExtractWithAi = async () => {
     if (!photoFile) return;
     setExtracting(true);
+    setExtractPhase('preparing');
     setMessage(null);
     setMessageType('');
+    if (extractAlmostTimerRef.current != null) {
+      window.clearTimeout(extractAlmostTimerRef.current);
+      extractAlmostTimerRef.current = null;
+    }
     try {
-      const { fuel_type, price } = await extractPriceFromImage(photoFile);
+      const prepared = pickSmallerImageFile(photoFile, await compressImageFile(photoFile));
+      if (prepared !== photoFile) {
+        setPhotoFile(prepared);
+      }
+
+      setExtractPhase('reading');
+      extractAlmostTimerRef.current = window.setTimeout(() => {
+        setExtractPhase((p) => (p === 'reading' ? 'almost' : p));
+        extractAlmostTimerRef.current = null;
+      }, 1700);
+
+      const { fuel_type, price } = await extractPriceFromImage(prepared);
+
+      if (extractAlmostTimerRef.current != null) {
+        window.clearTimeout(extractAlmostTimerRef.current);
+        extractAlmostTimerRef.current = null;
+      }
+
+      setExtractPhase('finalizing');
+
       if (fuel_type && FUEL_TYPES.some((f) => f.value === fuel_type)) {
         setPrice(fuel_type, price != null && Number.isFinite(price) ? String(price) : '');
       }
@@ -252,10 +374,18 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
         setMessage('Could not read fuel type or price from photo. Enter manually.');
         setMessageType('error');
       }
+
+      setExtractPhase('completed');
+      await new Promise((r) => setTimeout(r, 700));
     } catch (err) {
+      if (extractAlmostTimerRef.current != null) {
+        window.clearTimeout(extractAlmostTimerRef.current);
+        extractAlmostTimerRef.current = null;
+      }
       setMessage(toFriendlyErrorMessage(err.message) || 'Could not read from photo. Enter prices manually.');
       setMessageType('error');
     } finally {
+      setExtractPhase('');
       setExtracting(false);
     }
   };
@@ -293,15 +423,26 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
     }
 
     setSubmitting(true);
+    setSubmitPhase('');
     setMessage(null);
     setMessageType('');
 
     let photoUrl = null;
+    let photoPayload = photoFile;
+
     if (photoFile) {
       try {
-        const verdict = await moderatePhotoUpload(photoFile);
+        setSubmitPhase('preparing');
+        photoPayload = pickSmallerImageFile(photoFile, await compressImageFile(photoFile));
+        if (photoPayload !== photoFile) {
+          setPhotoFile(photoPayload);
+        }
+
+        setSubmitPhase('verifying');
+        const verdict = await moderatePhotoUpload(photoPayload);
         if (!verdict.allow) {
           setSubmitting(false);
+          setSubmitPhase('');
           setMessage(
             verdict.reason ||
               'Photo rejected. Only gas station price-related images are allowed (no sexual, political, or unrelated content).'
@@ -311,20 +452,21 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
         }
       } catch (e) {
         setSubmitting(false);
-        setMessage(
-          'Photo verification is unavailable right now. Please try again or submit without photo.'
-        );
+        setSubmitPhase('');
+        setMessage(moderationUserMessage(e));
         setMessageType('error');
         return;
       }
 
-      const ext = photoFile.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const ext = photoPayload.name.split('.').pop()?.toLowerCase() || 'jpg';
       const path = `${stationId}/${createUploadId()}.${ext}`;
+      setSubmitPhase('uploading');
       const { error: uploadError } = await supabase.storage
         .from(BUCKET)
-        .upload(path, photoFile, { upsert: false });
+        .upload(path, photoPayload, { upsert: false });
       if (uploadError) {
         setSubmitting(false);
+        setSubmitPhase('');
         setMessage(toFriendlyErrorMessage(uploadError.message));
         setMessageType('error');
         return;
@@ -333,6 +475,7 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
       photoUrl = data?.publicUrl || null;
     }
 
+    setSubmitPhase('saving');
     for (const { fuel_type, num } of entries) {
       const { error } = await supabase.from('price_reports').insert({
         station_id: stationId,
@@ -342,12 +485,16 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
       });
       if (error) {
         setSubmitting(false);
+        setSubmitPhase('');
         setMessage(toFriendlyErrorMessage(error.message));
         setMessageType('error');
         return;
       }
     }
 
+    setSubmitPhase('completed');
+    await new Promise((r) => setTimeout(r, 450));
+    setSubmitPhase('');
     setSubmitting(false);
     setPrices(initialPrices());
     setPhotoFile(null);
@@ -363,8 +510,13 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
     return !isNaN(p) && p >= PRICE_MIN && p <= PRICE_MAX;
   });
 
+  const formBusy = submitting || extracting || optimizingPhoto;
+
   return (
-    <section className="submit-section">
+    <section
+      className={`submit-section${formBusy ? ' submit-section--busy' : ''}`}
+      aria-busy={formBusy || undefined}
+    >
       <h3 className="station-panel__section-title">Submit price</h3>
       <form onSubmit={handleSubmit} className="form-grid">
         <input type="hidden" value={stationId} readOnly />
@@ -379,6 +531,7 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
               value={prices[value]}
               onChange={(e) => setPrice(value, e.target.value)}
               placeholder=""
+              disabled={formBusy}
             />
           </div>
         ))}
@@ -406,6 +559,7 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
               type="button"
               className="btn-secondary"
               onClick={() => fileInputRef.current?.click()}
+              disabled={formBusy}
             >
               Choose file
             </button>
@@ -413,14 +567,25 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
               type="button"
               className="btn-secondary btn-take-photo"
               onClick={openTakePhoto}
+              disabled={formBusy}
             >
               <CameraIcon />
               Take photo
             </button>
           </div>
+          {optimizingPhoto && (
+            <p className="form-msg form-msg--optimizing" role="status">
+              <span className="ai-phase-progress__spinner" aria-hidden="true" />
+              Optimizing photo for faster upload…
+            </p>
+          )}
           {photoFile ? (
             <p className="form-msg form-photo-name">
-              {photoFile.name || 'Photo'} ({(photoFile.size / 1024).toFixed(1)} KB)
+              {photoFile.name || 'Photo'} (
+              {photoFile.size >= 1024 * 1024
+                ? `${(photoFile.size / (1024 * 1024)).toFixed(2)} MB`
+                : `${(photoFile.size / 1024).toFixed(1)} KB`}
+              )
             </p>
           ) : (
             <p className="form-msg form-photo-hint">No file chosen</p>
@@ -428,14 +593,17 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
           {photoFile && (
             <>
               {isGroqConfigured() && (
-                <button
-                  type="button"
-                  className="btn-ai-extract"
-                  onClick={handleExtractWithAi}
-                  disabled={extracting}
-                >
-                  {extracting ? 'Extracting…' : 'Extract fuel & price with AI'}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="btn-ai-extract"
+                    onClick={handleExtractWithAi}
+                    disabled={extracting || optimizingPhoto}
+                  >
+                    {extracting ? 'Working…' : 'Extract fuel & price with AI'}
+                  </button>
+                  <AiPhaseProgress phase={extractPhase} variant="extract" />
+                </>
               )}
             </>
           )}
@@ -452,8 +620,15 @@ export default function SubmitPriceForm({ stationId, stationName, onSubmitted })
             <span className="form-notif__text">{message}</span>
           </div>
         )}
-        <button type="submit" disabled={submitting || !hasAnyPrice} className="btn-primary">
-          {submitting ? 'Submitting…' : 'Submit price'}
+        {submitting && submitPhase ? (
+          <AiPhaseProgress phase={submitPhase} variant="submit" />
+        ) : null}
+        <button
+          type="submit"
+          disabled={submitting || extracting || optimizingPhoto || !hasAnyPrice}
+          className="btn-primary"
+        >
+          {submitting ? 'Please wait…' : 'Submit price'}
         </button>
       </form>
 

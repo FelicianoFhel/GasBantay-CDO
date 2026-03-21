@@ -39,17 +39,46 @@ function fileToBase64(file) {
   });
 }
 
+const MODERATE_TIMEOUT_MS = 55_000;
+
 export async function moderatePhotoUpload(file) {
   const base64 = await fileToBase64(file);
   const mime = String(file?.type || 'image/jpeg').toLowerCase();
-  const res = await fetch(photoModerationUrl(), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image_base64: base64, mime }),
-  });
-  const data = await res.json().catch(() => ({}));
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MODERATE_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(photoModerationUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_base64: base64, mime }),
+      signal: controller.signal,
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    if (e?.name === 'AbortError') {
+      const err = new Error('Photo check timed out. Try a smaller photo or submit without a photo.');
+      err.status = 408;
+      throw err;
+    }
+    const err = new Error(e?.message || 'Network error during photo check.');
+    err.status = 0;
+    err.cause = e;
+    throw err;
+  }
+  clearTimeout(timer);
+
+  const rawText = await res.text();
+  let data = {};
+  try {
+    data = rawText ? JSON.parse(rawText) : {};
+  } catch {
+    data = { error: rawText?.slice(0, 120) || 'Invalid server response' };
+  }
   if (!res.ok) {
-    throw new Error(data.error || 'Photo moderation request failed.');
+    const err = new Error(data.error || 'Photo moderation request failed.');
+    err.status = res.status;
+    throw err;
   }
   return {
     allow: Boolean(data.allow),
