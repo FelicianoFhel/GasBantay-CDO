@@ -384,6 +384,7 @@ export default function App() {
           station={selectedStation}
           onClose={handleClosePopup}
           onReportSubmitted={handleReportSubmitted}
+          userPosition={userPosition}
         />
       )}
       <ChatAssistant

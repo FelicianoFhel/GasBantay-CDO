@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { haversine } from '../lib/geo';
 import { FUEL_TYPES } from '../constants';
+import { googleMapsDirectionsUrl } from '../lib/navigationLinks';
 
 const TREND_DAYS = 7;
 const TREND_EPS = 0.15;
@@ -395,31 +396,51 @@ export default function Dashboard({
           </p>
         ) : (
           <div className="card-grid">
-            {cheapestList.map((s, i) => (
-              <button
-                key={s.id}
-                type="button"
-                className="station-card"
-                onClick={() => onSelectStation(s)}
-              >
-                <div className="station-card__img-wrap">
-                  {s.photoUrl ? (
-                    <img src={s.photoUrl} alt="" className="station-card__img" />
-                  ) : (
-                    <div className="station-card__img-placeholder" aria-hidden="true">
-                      <span className="station-card__placeholder-icon" aria-hidden="true">⛽</span>
+            {cheapestList.map((s, i) => {
+              const directionsUrl = googleMapsDirectionsUrl({
+                destLat: s.lat,
+                destLng: s.lng,
+                originLat: userPosition?.lat,
+                originLng: userPosition?.lng,
+              });
+              return (
+                <div key={s.id} className="station-card-wrap">
+                  <button
+                    type="button"
+                    className="station-card"
+                    onClick={() => onSelectStation(s)}
+                  >
+                    <div className="station-card__img-wrap">
+                      {s.photoUrl ? (
+                        <img src={s.photoUrl} alt="" className="station-card__img" />
+                      ) : (
+                        <div className="station-card__img-placeholder" aria-hidden="true">
+                          <span className="station-card__placeholder-icon" aria-hidden="true">⛽</span>
+                        </div>
+                      )}
+                      <span className="station-card__rank">#{i + 1}</span>
                     </div>
+                    <div className="station-card__body">
+                      <span className="station-card__name">{s.name}</span>
+                      {s.address && <span className="station-card__address">{s.address}</span>}
+                      <span className="station-card__price">₱{s.price?.toFixed(2)}</span>
+                      <span className="station-card__meta">{s.distance.toFixed(1)} km away</span>
+                    </div>
+                  </button>
+                  {directionsUrl && (
+                    <a
+                      href={directionsUrl}
+                      className="station-card__directions"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Open directions to ${s.name} in Google Maps`}
+                    >
+                      Directions
+                    </a>
                   )}
-                  <span className="station-card__rank">#{i + 1}</span>
                 </div>
-                <div className="station-card__body">
-                  <span className="station-card__name">{s.name}</span>
-                  {s.address && <span className="station-card__address">{s.address}</span>}
-                  <span className="station-card__price">₱{s.price?.toFixed(2)}</span>
-                  <span className="station-card__meta">{s.distance.toFixed(1)} km away</span>
-                </div>
-              </button>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
@@ -433,29 +454,49 @@ export default function Dashboard({
           <p className="station-panel__muted">Loading…</p>
         ) : (
           <div className="card-grid">
-            {nearMeList.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                className="station-card"
-                onClick={() => onSelectStation(s)}
-              >
-                <div className="station-card__img-wrap">
-                  {s.photoUrl ? (
-                    <img src={s.photoUrl} alt="" className="station-card__img" />
-                  ) : (
-                    <div className="station-card__img-placeholder" aria-hidden="true">
-                      <span className="station-card__placeholder-icon" aria-hidden="true">⛽</span>
+            {nearMeList.map((s) => {
+              const directionsUrl = googleMapsDirectionsUrl({
+                destLat: s.lat,
+                destLng: s.lng,
+                originLat: userPosition?.lat,
+                originLng: userPosition?.lng,
+              });
+              return (
+                <div key={s.id} className="station-card-wrap">
+                  <button
+                    type="button"
+                    className="station-card"
+                    onClick={() => onSelectStation(s)}
+                  >
+                    <div className="station-card__img-wrap">
+                      {s.photoUrl ? (
+                        <img src={s.photoUrl} alt="" className="station-card__img" />
+                      ) : (
+                        <div className="station-card__img-placeholder" aria-hidden="true">
+                          <span className="station-card__placeholder-icon" aria-hidden="true">⛽</span>
+                        </div>
+                      )}
                     </div>
+                    <div className="station-card__body">
+                      <span className="station-card__name">{s.name}</span>
+                      {s.address && <span className="station-card__address">{s.address}</span>}
+                      <span className="station-card__meta">{s.distance.toFixed(1)} km away</span>
+                    </div>
+                  </button>
+                  {directionsUrl && (
+                    <a
+                      href={directionsUrl}
+                      className="station-card__directions"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Open directions to ${s.name} in Google Maps`}
+                    >
+                      Directions
+                    </a>
                   )}
                 </div>
-                <div className="station-card__body">
-                  <span className="station-card__name">{s.name}</span>
-                  {s.address && <span className="station-card__address">{s.address}</span>}
-                  <span className="station-card__meta">{s.distance.toFixed(1)} km away</span>
-                </div>
-              </button>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

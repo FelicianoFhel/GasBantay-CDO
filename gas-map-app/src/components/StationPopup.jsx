@@ -9,6 +9,11 @@ import {
 } from '../lib/voteCooldown';
 import { FUEL_TYPES } from '../constants';
 import SubmitPriceForm from './SubmitPriceForm';
+import {
+  googleMapsDirectionsUrl,
+  wazeNavigateUrl,
+  appleMapsDirectionsUrl,
+} from '../lib/navigationLinks';
 
 const RECENT_COLLAPSED = 3;
 const RECENT_MAX = 10;
@@ -25,7 +30,12 @@ function wilsonLowerBound(upvotes, downvotes) {
   return numerator / denominator;
 }
 
-export default function StationPopup({ station, onClose, onReportSubmitted }) {
+export default function StationPopup({
+  station,
+  onClose,
+  onReportSubmitted,
+  userPosition = null,
+}) {
   const [reports, setReports] = useState([]);
   const [likeCounts, setLikeCounts] = useState({});
   const [dislikeCounts, setDislikeCounts] = useState({});
@@ -336,6 +346,24 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
     setReportsExpanded(false);
   };
 
+  const externalNav = useMemo(() => {
+    const destLat = station.lat;
+    const destLng = station.lng;
+    const google = googleMapsDirectionsUrl({
+      destLat,
+      destLng,
+      originLat: userPosition?.lat,
+      originLng: userPosition?.lng,
+    });
+    if (!google) return null;
+    return {
+      google,
+      waze: wazeNavigateUrl({ destLat, destLng }),
+      apple: appleMapsDirectionsUrl({ destLat, destLng }),
+      labelBase: `Directions to ${station.name || 'station'}`,
+    };
+  }, [station.lat, station.lng, station.name, userPosition?.lat, userPosition?.lng]);
+
   return (
     <div
       className="station-overlay is-open"
@@ -365,6 +393,42 @@ export default function StationPopup({ station, onClose, onReportSubmitted }) {
         </div>
         {station.address && (
           <p className="station-panel__address">{station.address}</p>
+        )}
+
+        {externalNav && (
+          <div className="station-panel__nav">
+            <a
+              className="station-panel__nav-link station-panel__nav-link--primary"
+              href={externalNav.google}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`${externalNav.labelBase} in Google Maps`}
+            >
+              Google Maps
+            </a>
+            {externalNav.waze && (
+              <a
+                className="station-panel__nav-link"
+                href={externalNav.waze}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`${externalNav.labelBase} in Waze`}
+              >
+                Waze
+              </a>
+            )}
+            {externalNav.apple && (
+              <a
+                className="station-panel__nav-link"
+                href={externalNav.apple}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`${externalNav.labelBase} in Apple Maps`}
+              >
+                Apple Maps
+              </a>
+            )}
+          </div>
         )}
 
         <div className="station-panel__body">
